@@ -10,6 +10,8 @@ messages des commits depuis la version précédente.
 
 ## [Non publié]
 
+## [1.0.0] - 2026-10-15
+
 - Première version publiée : référentiel technique des clients, gestionnaire
   de mots de passe, explorateur de fichiers, imports et exports, audit.
 - Déploiement sur un hébergement Plesk, mise à jour depuis l'administration
