@@ -1,0 +1,48 @@
+# Configuration locale et clés : JAMAIS dans le dépôt.
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.plesk.example
+/docker/secrets/
+/docker/certs/
+*.key
+*.pem
+*.age
+age-key*.txt
+techindex-cles-*.txt
+
+# Données
+/backups
+/storage/*.key
+/storage/pail
+
+# Dépendances et compilation (dist : archives de déploiement Plesk)
+/dist
+/node_modules
+/vendor
+/public/build
+/public/hot
+/public/storage
+/public/fonts-manifest.dev.json
+
+# Outils
+*.log
+.DS_Store
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
+compose.override.yaml
+/.deploy
+/.techindex-expose-db

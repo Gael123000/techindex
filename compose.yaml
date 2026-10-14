@@ -1,0 +1,131 @@
+# TechIndex – environnement de DÉVELOPPEMENT local (Docker Desktop + WSL2).
+#
+# Utilisez le script .\techindex.ps1 (install, start, stop, logs...).
+# Les ports ne sont publiés que sur 127.0.0.1. MariaDB n'est pas exposé
+# (voir compose.db-port.yaml pour un accès local facultatif).
+#
+# Production : compose.prod.yaml (fichier distinct, sans outils de développement).
+
+name: techindex
+
+x-app: &app
+  build:
+    context: .
+    target: dev
+  image: techindex-app:dev
+  working_dir: /var/www/html
+  volumes:
+    - .:/var/www/html
+  depends_on:
+    mariadb:
+      condition: service_healthy
+  networks: [backend]
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    healthcheck:
+      test: ["CMD", "php-fpm-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=1", "--max-time=3600"]
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+
+  web:
+    image: nginx:1.30.5-alpine
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    environment:
+      NGINX_SERVER_NAME: localhost
+      PHP_FPM_HOST: app
+    volumes:
+      - ./public:/var/www/html/public:ro
+      - ./docker/nginx/snippets:/etc/nginx/snippets:ro
+      # Modèle HTTP traité directement par l'image Nginx (substitution des variables).
+      - ./docker/nginx/templates-available/http.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11.8.9
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+      - --max-allowed-packet=64M
+      - --innodb-buffer-pool-size=256M
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-techindex}
+      MARIADB_USER: ${DB_USERNAME:-techindex}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD doit être défini dans .env}
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [backend]
+    restart: unless-stopped
+
+  # Boîte de réception de test : tous les e-mails envoyés en développement.
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    networks: [backend]
+    restart: unless-stopped
+
+  # Compilation des ressources (lancé à la demande par le script).
+  node:
+    image: node:24.21.0-trixie-slim
+    profiles: ["tools"]
+    working_dir: /app
+    volumes:
+      - .:/app
+      # node_modules dans un volume : binaires Linux, séparés de ceux du poste Windows.
+      - node-modules:/app/node_modules
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run build"]
+
+  # Serveur Vite avec rechargement à chaud (facultatif : .\techindex.ps1 dev).
+  vite:
+    image: node:24.21.0-trixie-slim
+    profiles: ["hmr"]
+    working_dir: /app
+    environment:
+      VITE_DEV_SERVER_HOST: 0.0.0.0
+      VITE_USE_POLLING: "true"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - .:/app
+      - node-modules:/app/node_modules
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev"]
+
+volumes:
+  mariadb-data:
+  node-modules:
+
+networks:
+  backend:

@@ -1,0 +1,36 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "techindex",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=24.0.0 <25"
+    },
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite",
+        "typecheck": "vue-tsc --noEmit"
+    },
+    "dependencies": {
+        "@inertiajs/vue3": "3.9.1",
+        "@lucide/vue": "1.57.0",
+        "@tiptap/extension-table": "3.32.0",
+        "@tiptap/extensions": "3.32.0",
+        "@tiptap/pm": "3.32.0",
+        "@tiptap/starter-kit": "3.32.0",
+        "@tiptap/vue-3": "3.32.0",
+        "vue": "3.5.44",
+        "ziggy-js": "2.6.5"
+    },
+    "devDependencies": {
+        "@tailwindcss/forms": "0.5.11",
+        "@tailwindcss/vite": "4.3.3",
+        "@types/node": "24.19.2",
+        "@vitejs/plugin-vue": "6.0.10",
+        "laravel-vite-plugin": "3.2.0",
+        "tailwindcss": "4.3.3",
+        "typescript": "6.0.3",
+        "vite": "8.3.4",
+        "vue-tsc": "3.3.13"
+    }
+}

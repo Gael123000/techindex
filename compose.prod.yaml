@@ -1,0 +1,144 @@
+# TechIndex – PRODUCTION (serveur Linux, Docker Engine + Compose v2).
+#
+# Utilisation : scripts/techindex.sh (install, update, backup...), ou
+#   docker compose -f compose.prod.yaml --env-file .env up -d
+#
+# - MariaDB n'est joint qu'au réseau interne "backend" (sans accès extérieur,
+#   aucun port publié).
+# - Seul Nginx publie des ports (80/443).
+# - Les données (base, pièces jointes, certificats) sont dans des volumes
+#   nommés : arrêter ou reconstruire les conteneurs ne les supprime pas.
+
+name: techindex
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-app: &app
+  image: ${TECHINDEX_IMAGE:-techindex-app}:${TECHINDEX_VERSION:-latest-build}
+  build:
+    context: .
+    target: production
+  restart: unless-stopped
+  logging: *logging
+  volumes:
+    - ./.env:/var/www/html/.env:ro
+    - app-storage:/var/www/html/storage/app
+    - ./backups:/backups
+  networks: [backend, egress]
+  depends_on:
+    mariadb:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *app
+    healthcheck:
+      test: ["CMD", "php-fpm-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=1", "--max-time=3600", "--memory=256"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan queue:work' > /dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan schedule:work' > /dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  web:
+    image: ${TECHINDEX_WEB_IMAGE:-techindex-web}:${TECHINDEX_VERSION:-latest-build}
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      NGINX_SERVER_NAME: ${APP_DOMAIN:?APP_DOMAIN doit être défini dans .env}
+      PHP_FPM_HOST: app
+      TLS_MODE: ${TLS_MODE:-letsencrypt}
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [backend, egress]
+
+  mariadb:
+    image: mariadb:11.8.9
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+      - --max-allowed-packet=64M
+      - --innodb-buffer-pool-size=${MARIADB_BUFFER_POOL:-512M}
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-techindex}
+      MARIADB_USER: ${DB_USERNAME:-techindex}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD doit être défini dans .env}
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks: [backend]
+
+  # Renouvellement automatique des certificats Let's Encrypt (deux fois par jour).
+  certbot:
+    image: certbot/certbot:v5.8.0
+    profiles: ["letsencrypt"]
+    restart: unless-stopped
+    logging: *logging
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    networks: [egress]
+
+volumes:
+  mariadb-data:
+  app-storage:
+  letsencrypt:
+  certbot-www:
+
+networks:
+  # Réseau interne : aucune sortie vers l'extérieur.
+  backend:
+    internal: true
+  # Accès sortant (SMTP pour l'application, ACME pour certbot) et ports publiés.
+  egress:

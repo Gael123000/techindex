@@ -1,0 +1,218 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+
+@source '../views';
+@source '../js';
+
+/*
+ * Identité visuelle TechIndex : bleu nuit, turquoise et tons neutres.
+ * Les contrastes texte / fond respectent au minimum le niveau AA (4,5:1).
+ */
+@theme {
+    --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+
+    --color-navy-50: #eef3fb;
+    --color-navy-100: #d9e3f4;
+    --color-navy-200: #b4c6e8;
+    --color-navy-300: #87a2d6;
+    --color-navy-400: #5677bd;
+    --color-navy-500: #3a5aa1;
+    --color-navy-600: #2c4683;
+    --color-navy-700: #22386b;
+    --color-navy-800: #182a52;
+    --color-navy-900: #10203f;
+    --color-navy-950: #0a1429;
+
+    --color-turquoise-50: #ecfdfa;
+    --color-turquoise-100: #cffaf1;
+    --color-turquoise-200: #a2f3e4;
+    --color-turquoise-300: #67e6d3;
+    --color-turquoise-400: #2fcfbd;
+    --color-turquoise-500: #14b3a4;
+    --color-turquoise-600: #0d9185;
+    --color-turquoise-700: #0f736b;
+    --color-turquoise-800: #115c57;
+    --color-turquoise-900: #124c48;
+}
+
+@layer base {
+    html,
+    body {
+        height: 100%;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-turquoise-500);
+        outline-offset: 2px;
+    }
+
+    [type='checkbox'],
+    [type='radio'] {
+        color: var(--color-navy-800);
+    }
+}
+
+@layer components {
+    .btn-primary,
+    .btn-accent,
+    .btn-secondary,
+    .btn-danger,
+    .btn-ghost {
+        @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+    }
+
+    .btn-primary {
+        @apply bg-navy-900 text-white hover:bg-navy-800;
+    }
+
+    .btn-accent {
+        @apply bg-turquoise-700 text-white hover:bg-turquoise-800;
+    }
+
+    .btn-secondary {
+        @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    }
+
+    .btn-danger {
+        @apply bg-red-700 text-white hover:bg-red-800;
+    }
+
+    .btn-ghost {
+        @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+    }
+
+    .btn-sm {
+        @apply px-2.5 py-1.5 text-xs;
+    }
+
+    .card {
+        @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+    }
+
+    .form-input {
+        @apply block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-turquoise-600 focus:ring-turquoise-600;
+    }
+
+    .link {
+        @apply font-medium text-turquoise-700 underline-offset-2 hover:text-turquoise-800 hover:underline;
+    }
+
+    .table-base {
+        @apply min-w-full divide-y divide-slate-200 text-sm;
+    }
+
+    .table-base th {
+        @apply bg-slate-50 px-3 py-2.5 text-left text-xs font-semibold tracking-wide text-slate-600 uppercase;
+    }
+
+    .table-base td {
+        @apply px-3 py-2.5 align-top text-slate-700;
+    }
+
+    .table-base tbody tr {
+        @apply hover:bg-slate-50;
+    }
+
+    .dl-grid {
+        @apply grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2;
+    }
+
+    .dl-grid dt {
+        @apply text-xs font-medium tracking-wide text-slate-500 uppercase;
+    }
+
+    .dl-grid dd {
+        @apply mt-0.5 break-words text-slate-800;
+    }
+}
+
+/* Contenu des fiches documentaires (HTML nettoyé côté serveur). */
+.doc-content {
+    @apply text-sm leading-relaxed text-slate-800;
+}
+
+.doc-content > * + * {
+    @apply mt-3;
+}
+
+.doc-content h2 {
+    @apply mt-6 text-lg font-semibold text-navy-900;
+}
+
+.doc-content h3 {
+    @apply mt-5 text-base font-semibold text-navy-900;
+}
+
+.doc-content h4 {
+    @apply mt-4 font-semibold text-navy-900;
+}
+
+.doc-content ul {
+    @apply list-disc pl-6;
+}
+
+.doc-content ol {
+    @apply list-decimal pl-6;
+}
+
+.doc-content li > p {
+    @apply my-0;
+}
+
+.doc-content a {
+    @apply text-turquoise-700 underline;
+}
+
+.doc-content code {
+    @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.85em];
+}
+
+.doc-content pre {
+    @apply overflow-x-auto rounded-md bg-navy-950 p-3 font-mono text-xs text-slate-100;
+}
+
+.doc-content pre code {
+    @apply bg-transparent p-0 text-inherit;
+}
+
+.doc-content blockquote {
+    @apply border-l-4 border-turquoise-500 bg-turquoise-50 py-1 pl-4 text-slate-700;
+}
+
+.doc-content table {
+    @apply w-full border-collapse text-sm;
+}
+
+.doc-content th,
+.doc-content td {
+    @apply border border-slate-300 px-2 py-1.5 text-left align-top;
+}
+
+.doc-content th {
+    @apply bg-slate-100 font-semibold;
+}
+
+.doc-content hr {
+    @apply border-slate-200;
+}
+
+/* Éditeur TipTap. */
+.ProseMirror {
+    @apply min-h-[320px] px-4 py-3 outline-none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-left h-0 text-slate-400;
+}
+
+.ProseMirror .selectedCell::after {
+    @apply pointer-events-none absolute inset-0 bg-turquoise-200/40;
+    content: '';
+}
+
+.ProseMirror td,
+.ProseMirror th {
+    @apply relative;
+}

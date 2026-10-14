@@ -1,0 +1,18 @@
+# TechIndex – HTTP (développement, installation derrière un reverse proxy
+# TLS, ou étape initiale avant l'obtention du certificat Let's Encrypt).
+upstream php_fpm {
+    server ${PHP_FPM_HOST}:9000;
+}
+
+server {
+    listen 80 default_server;
+    server_name ${NGINX_SERVER_NAME};
+
+    # Validation Let's Encrypt (méthode webroot).
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+    }
+
+    include /etc/nginx/snippets/techindex.conf;
+}

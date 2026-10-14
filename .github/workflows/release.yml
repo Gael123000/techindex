@@ -1,0 +1,104 @@
+# Publication d'une version, déclenchée par l'étiquette vX.Y.Z que pose
+# « .\techindex.cmd release ». Étapes : contrôles complets (ci.yml), archive
+# Plesk, manifeste signé (Ed25519, secret TECHINDEX_SIGNING_KEY), puis
+# publication GitHub. Les installations ne proposent que les versions dont
+# la signature correspond à la clé publique de config/release-channel.json.
+name: Publication
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Archive signée et publication
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Récupération du code (historique complet)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Contrôle de la version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::Étiquette invalide : $GITHUB_REF_NAME"; exit 1; }
+          [ "$(tr -d '[:space:]' < VERSION)" = "$version" ] || { echo "::error::Le fichier VERSION ne correspond pas à l'étiquette $GITHUB_REF_NAME"; exit 1; }
+          grep -Eq '"public_key": *"[A-Za-z0-9+/=]{40,}"' config/release-channel.json \
+            || { echo "::error::Clé publique absente de config/release-channel.json (lancez release-init)"; exit 1; }
+          commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${commit}^" 2> /dev/null || true)"
+          if [ -z "$previous" ] || [ -n "$(git diff --name-only "$previous" "$commit" -- database/migrations)" ]; then migrations=1; else migrations=0; fi
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "migrations=$migrations"
+            echo "previous=$previous"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notes de version (CHANGELOG.md)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v version="$VERSION" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
+          [ -s release-notes.md ] || echo "Version $VERSION." > release-notes.md
+          cat release-notes.md
+
+      - name: Archive Plesk
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: docker build --target plesk-release --build-arg "TECHINDEX_VERSION=$VERSION" --output type=local,dest=dist .
+
+      # Les installations vérifient avec la clé publique de la version qu'elles
+      # ont installée : la signature doit donc correspondre à la clé de la
+      # version précédente (ce qui permet aussi de publier une nouvelle clé).
+      - name: Manifeste signé
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ steps.version.outputs.commit }}
+          MIGRATIONS: ${{ steps.version.outputs.migrations }}
+          PREVIOUS: ${{ steps.version.outputs.previous }}
+          TECHINDEX_SIGNING_KEY: ${{ secrets.TECHINDEX_SIGNING_KEY }}
+        run: |
+          [ -n "$TECHINDEX_SIGNING_KEY" ] || { echo "::error::Secret TECHINDEX_SIGNING_KEY absent (Settings > Secrets and variables > Actions)"; exit 1; }
+          channel="$(git show "$PREVIOUS:config/release-channel.json" 2> /dev/null || true)"
+          public_key="$(sed -n 's/.*"public_key": *"\([^"]*\)".*/\1/p' <<< "$channel")"
+          [ -n "$public_key" ] || public_key="$(sed -n 's/.*"public_key": *"\([^"]*\)".*/\1/p' config/release-channel.json)"
+          docker run --rm -e TECHINDEX_SIGNING_KEY -e VERSION -e COMMIT -e MIGRATIONS -e PUBLIC_KEY="$public_key" \
+            -v "$PWD:/repo" -w /repo php:8.5.11-cli-trixie sh -c '
+              php scripts/release-tool.php manifest dist "$VERSION" "v$VERSION" "$COMMIT" "$MIGRATIONS" release-notes.md \
+              && php scripts/release-tool.php sign dist/release.json "$PUBLIC_KEY" \
+              && php scripts/release-tool.php verify dist/release.json dist/release.json.sig "$PUBLIC_KEY"'
+          ls -l dist
+
+      - name: Publication sur GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          prerelease=()
+          [[ "$VERSION" != *-* ]] || prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "TechIndex $VERSION" --notes-file release-notes.md "${prerelease[@]}" \
+            "dist/techindex-plesk-$VERSION.tar.gz" "dist/techindex-plesk-$VERSION.tar.gz.sha256" \
+            dist/techindex-plesk.sh dist/release.json dist/release.json.sig

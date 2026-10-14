@@ -1,0 +1,39 @@
+#!/bin/sh
+# Choisit la configuration Nginx avant la substitution des modèles
+# (20-envsubst-on-templates.sh de l'image officielle).
+#
+#   TLS_MODE=off         : HTTP uniquement (TLS assuré par un reverse proxy)
+#   TLS_MODE=letsencrypt : HTTPS avec /etc/letsencrypt/live/<domaine>/
+#   TLS_MODE=custom      : HTTPS avec TLS_CERT_FILE et TLS_KEY_FILE fournis
+#
+# Si le certificat attendu n'existe pas encore, Nginx démarre en HTTP pour
+# permettre la première validation Let's Encrypt.
+#
+# Fichier « .envsh » : il est SOURCÉ par l'entrypoint de l'image Nginx, afin
+# que les variables exportées soient visibles lors de la substitution.
+
+mkdir -p /etc/nginx/templates /var/www/certbot
+rm -f /etc/nginx/templates/*.template /etc/nginx/conf.d/default.conf
+
+: "${NGINX_SERVER_NAME:=localhost}"
+: "${PHP_FPM_HOST:=app}"
+: "${TLS_MODE:=off}"
+
+if [ "$TLS_MODE" = "letsencrypt" ]; then
+    : "${TLS_CERT_FILE:=/etc/letsencrypt/live/${NGINX_SERVER_NAME}/fullchain.pem}"
+    : "${TLS_KEY_FILE:=/etc/letsencrypt/live/${NGINX_SERVER_NAME}/privkey.pem}"
+fi
+
+template=http.conf.template
+
+if [ "$TLS_MODE" != "off" ]; then
+    if [ -n "${TLS_CERT_FILE:-}" ] && [ -f "${TLS_CERT_FILE}" ] && [ -f "${TLS_KEY_FILE:-}" ]; then
+        template=https.conf.template
+    else
+        echo "TechIndex : certificat introuvable (${TLS_CERT_FILE:-non défini}), démarrage en HTTP pour permettre son obtention." >&2
+    fi
+fi
+
+export NGINX_SERVER_NAME PHP_FPM_HOST TLS_CERT_FILE="${TLS_CERT_FILE:-}" TLS_KEY_FILE="${TLS_KEY_FILE:-}"
+cp "/etc/nginx/templates-available/${template}" /etc/nginx/templates/default.conf.template
+echo "TechIndex : configuration Nginx « ${template} » pour ${NGINX_SERVER_NAME}." >&2

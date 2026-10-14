@@ -1,0 +1,64 @@
+# Contrôles automatiques à chaque envoi sur main et à chaque demande de fusion.
+# Également appelé par la publication (release.yml) : aucune version n'est
+# publiée si l'un de ces contrôles échoue.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests, typage et style
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.8.9
+        env:
+          MARIADB_ROOT_PASSWORD: techindex-ci
+          MARIADB_DATABASE: techindex_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Même PHP et mêmes extensions que le poste et la production (Dockerfile, cible dev).
+      - name: Image PHP
+        run: docker build --target dev -t techindex-ci .
+
+      - name: Dépendances PHP (composer.lock)
+        run: docker run --rm -v "$PWD:/var/www/html" techindex-ci composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Interface (typage et compilation)
+        run: docker run --rm -v "$PWD:/app" -w /app node:24.21.0-trixie-slim sh -c "npm ci --no-audit --no-fund && npm run typecheck && npm run build"
+
+      - name: Style du code PHP (Pint)
+        run: docker run --rm -v "$PWD:/var/www/html" techindex-ci vendor/bin/pint --test
+
+      - name: Tests automatisés (MariaDB 11.8)
+        run: >-
+          docker run --rm --network host -v "$PWD:/var/www/html"
+          -e DB_HOST=127.0.0.1 -e DB_PORT=3306 -e DB_USERNAME=root -e DB_PASSWORD=techindex-ci
+          techindex-ci php artisan test
+
+      - name: Scripts d'exploitation (ShellCheck)
+        run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.10.0 -S warning scripts/techindex.sh scripts/techindex-plesk.sh
