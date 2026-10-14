@@ -1,4 +1,4 @@
-# Déploiement sur un hébergement Plesk
+# Déploiement sur un hébergement Plesk Test
 
 Cette méthode installe TechIndex **sans Docker** sur un serveur administré
 avec Plesk Obsidian (Linux), derrière un domaine ou un sous-domaine. Elle
