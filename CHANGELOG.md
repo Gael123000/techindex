@@ -10,6 +10,10 @@ messages des commits depuis la version précédente.
 
 ## [Non publié]
 
+## [1.0.2] - 2026-10-15
+
+- Test Mise à jour
+
 ## [1.0.0] - 2026-10-15
 
 - Première version publiée : référentiel technique des clients, gestionnaire
