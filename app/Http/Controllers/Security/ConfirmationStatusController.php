@@ -8,17 +8,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Indique si une confirmation récente du mot de passe est valable pour la
- * portée demandée ("default" : profil, "secrets" : révélation des secrets).
+ * Indique si une confirmation récente de l'identité est encore valable
+ * (actions sensibles du compte).
  */
 class ConfirmationStatusController extends Controller
 {
     public function __invoke(Request $request): JsonResponse
     {
-        $scope = $request->query('scope') === 'secrets' ? 'secrets' : 'default';
-
         return response()
-            ->json(['confirmed' => RequireRecentPasswordConfirmation::isConfirmed($request, $scope)])
+            ->json(['confirmed' => RequireRecentPasswordConfirmation::isConfirmed($request)])
             ->header('Cache-Control', 'no-store, private');
     }
 }

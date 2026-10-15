@@ -4,11 +4,17 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
+import { notePageTitle } from './composables/useTabs';
 
 const appName = 'TechIndex';
 
 createInertiaApp({
-    title: (title) => (title ? `${title} · ${appName}` : appName),
+    title: (title, page) => {
+        // Le titre de la page sert aussi de libellé à l'onglet actif.
+        notePageTitle(title, page);
+
+        return title ? `${title} · ${appName}` : appName;
+    },
     resolve: (name) => {
         const pages = import.meta.glob<DefineComponent>('./pages/**/*.vue');
         const page = pages[`./pages/${name}.vue`];

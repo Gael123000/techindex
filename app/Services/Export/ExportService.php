@@ -40,7 +40,7 @@ class ExportService
     public function headings(string $dataset): array
     {
         return match ($dataset) {
-            'clients' => ['Nom', 'Référence', 'Statut', 'Adresse', 'Complément d\'adresse', 'Code postal', 'Ville', 'Pays', 'Téléphone', 'E-mail', 'Site web', 'Responsable interne', 'Étiquettes', 'Description', 'Notes', 'Mis à jour le'],
+            'clients' => ['Nom', 'Référence', 'Statut', 'Entreprise mère', 'Rôle dans le groupe', 'Adresse', 'Complément d\'adresse', 'Code postal', 'Ville', 'Pays', 'Téléphone', 'E-mail', 'Site web', 'Responsable interne', 'Étiquettes', 'Description', 'Notes', 'Mis à jour le'],
             'equipment' => ['Client', 'Nom', 'Type', 'Nom d\'hôte', 'Fabricant', 'Modèle', 'Numéro de série', 'Référence d\'inventaire', 'Site', 'Emplacement', 'Adresses IP', 'Adresses MAC', 'Système d\'exploitation', 'Version du système', 'Firmware', 'Rôle', 'Statut', 'Date d\'achat', 'Date de mise en service', 'Fin de garantie', 'Fin de vie', 'Fournisseur', 'URL d\'administration', 'Étiquettes', 'Description', 'Notes'],
             'sites' => ['Nom', 'Code', 'Adresse', 'Complément d\'adresse', 'Code postal', 'Ville', 'Pays', 'Téléphone', 'Consignes d\'accès', 'Statut', 'Notes'],
             'contacts' => ['Nom', 'Prénom', 'Fonction', 'Site', 'E-mail', 'Téléphone', 'Mobile', 'Contact technique', 'Contact principal', 'Notes'],
@@ -69,15 +69,20 @@ class ExportService
 
         switch ($dataset) {
             case 'clients':
-                $query = Client::query()->with(['accountManager:id,name', 'tags:id,name'])->orderBy('name');
+                $query = Client::query()->with(['accountManager:id,name', 'tags:id,name', 'parent:id,name'])->orderBy('name');
 
                 if ($clientIds !== null) {
                     $query->whereIn('id', $clientIds);
                 }
 
                 foreach ($query->lazyById(200) as $item) {
+                    // Nom de l'entreprise mère seulement si elle fait partie des clients exportables.
+                    $parent = $item->parent !== null && ($clientIds === null || in_array($item->parent_id, $clientIds, true))
+                        ? $item->parent->name
+                        : null;
+
                     yield [
-                        $item->name, $item->reference, $item->status->label(), $item->address_line1, $item->address_line2,
+                        $item->name, $item->reference, $item->status->label(), $parent, $item->group_role?->label(), $item->address_line1, $item->address_line2,
                         $item->postal_code, $item->city, $item->country, $item->phone, $item->email, $item->website,
                         $item->accountManager?->name, $item->tags->pluck('name')->implode(', '), $item->description,
                         $item->notes, $item->updated_at?->timezone(config('app.display_timezone'))->format('Y-m-d H:i'),

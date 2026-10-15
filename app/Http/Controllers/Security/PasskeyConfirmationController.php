@@ -11,8 +11,9 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Confirmation de l'identité par clé d'accès, à la place du mot de passe,
- * avant une action sensible (révélation d'un secret, sécurité du compte).
- * Elle a la même durée de validité qu'une confirmation par mot de passe.
+ * avant une action sensible du compte. Elle a la même durée de validité
+ * qu'une confirmation par mot de passe, et n'ouvre pas les mots de passe
+ * (déverrouillage distinct : VaultUnlockController).
  */
 class PasskeyConfirmationController extends Controller
 {

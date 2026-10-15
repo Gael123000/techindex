@@ -36,6 +36,9 @@ class License extends Model
             'status' => LicenseStatus::class,
             'billing_period' => BillingPeriod::class,
             'quantity' => 'integer',
+            'assigned_quantity' => 'integer',
+            'integration_account_id' => 'integer',
+            'synced_at' => 'datetime',
             'cost' => 'decimal:2',
             'purchase_date' => 'date:Y-m-d',
             'starts_at' => 'date:Y-m-d',
@@ -56,6 +59,26 @@ class License extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /**
+     * Compte d'intégration d'où provient la licence (null : saisie à la main).
+     *
+     * @return BelongsTo<IntegrationAccount, $this>
+     */
+    public function integrationAccount(): BelongsTo
+    {
+        return $this->belongsTo(IntegrationAccount::class);
+    }
+
+    public function isSynced(): bool
+    {
+        return $this->integration_account_id !== null;
+    }
+
+    protected function auditExcluded(): array
+    {
+        return ['synced_at', 'external_id', 'integration_account_id'];
     }
 
     /**

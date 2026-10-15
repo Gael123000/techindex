@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { Download, KeyRound, Plus } from '@lucide/vue';
+import { Download, KeyRound, Plug, Plus } from '@lucide/vue';
 import { computed } from 'vue';
 import { route } from 'ziggy-js';
 import CheckboxInput from '@/components/CheckboxInput.vue';
@@ -26,6 +26,8 @@ const props = defineProps<{
         publisher: string | null;
         supplier: string | null;
         quantity: number | null;
+        assigned_quantity: number | null;
+        integration_account_id: number | null;
         expires_at: string | null;
         auto_renewal: boolean;
         status: string;
@@ -85,11 +87,15 @@ const canCreate = props.context.permissions.edit && props.context.status === 'ac
                     <tr v-for="license in licenses.data" :key="license.id">
                         <td>
                             <Link :href="route('clients.licenses.show', [context.id, license.id])" class="link">{{ license.name }}</Link>
+                            <Plug v-if="license.integration_account_id" class="ml-1.5 inline h-3.5 w-3.5 text-turquoise-600" aria-label="Synchronisée par une intégration" />
                             <p class="text-xs text-slate-500">{{ license.supplier }}<template v-if="license.equipment_count"> · {{ license.equipment_count }} équip.</template></p>
                         </td>
                         <td>{{ kindLabels[license.kind] }}</td>
                         <td>{{ license.publisher ?? '—' }}</td>
-                        <td>{{ license.quantity ?? '—' }}</td>
+                        <td>
+                            {{ license.quantity ?? '—' }}
+                            <span v-if="license.assigned_quantity !== null" class="block text-xs text-slate-500">{{ license.assigned_quantity }} attribuée(s)</span>
+                        </td>
                         <td><StatusBadge :status="license.status" :label="statusLabels[license.status]" /></td>
                         <td class="text-xs">
                             <ExpiryBadge :date="license.expires_at" :warn-days="warnDays" />

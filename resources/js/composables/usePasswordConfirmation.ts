@@ -34,11 +34,10 @@ export function usePasswordConfirmationState(): ConfirmationState {
 }
 
 /**
- * Vérifie côté serveur si une confirmation récente existe pour la portée
- * demandée, et la demande sinon.
+ * Vérifie côté serveur si une confirmation récente existe, et la demande sinon.
  */
-export async function ensurePasswordConfirmed(scope: 'default' | 'secrets' = 'default'): Promise<boolean> {
-    const status = await requestJson<{ confirmed: boolean }>(route('security.confirmation-status', { scope }));
+export async function ensurePasswordConfirmed(): Promise<boolean> {
+    const status = await requestJson<{ confirmed: boolean }>(route('security.confirmation-status'));
 
     return status.confirmed ? true : requestPasswordConfirmation();
 }

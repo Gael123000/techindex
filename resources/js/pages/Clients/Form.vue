@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 import CheckboxInput from '@/components/CheckboxInput.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
@@ -37,12 +37,25 @@ interface ClientData {
     notes: string | null;
     tags: string[];
     logo_url: string | null;
+    parent_id: number | null;
+    group_role: string | null;
+}
+
+interface GroupForm {
+    parents: Option<number>[];
+    roles: Option[];
+    head_roles: string[];
+    member_roles: string[];
+    /** Entreprise mère non attribuée à l'utilisateur : rattachement conservé tel quel. */
+    parent_hidden: boolean;
+    has_members: boolean;
 }
 
 const props = defineProps<{
     client: ClientData | null;
     context?: ClientContext;
-    defaults: { reference: string; account_manager_id: number; country: string } | null;
+    defaults: { reference: string; account_manager_id: number; country: string; parent_id: number | null; group_role: string | null } | null;
+    group: GroupForm;
     managers: Option<number>[];
     tags: TagRef[];
     /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
@@ -64,10 +77,28 @@ const form = useForm({
     website: props.client?.website ?? '',
     notes: props.client?.notes ?? '',
     tags: props.client?.tags ?? ([] as string[]),
+    parent_id: props.client?.parent_id ?? props.defaults?.parent_id ?? null,
+    group_role: props.client?.group_role ?? props.defaults?.group_role ?? null,
     logo: null as File | null,
     remove_logo: false,
     fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
+
+/* Rôles proposés selon le rattachement : membre avec une entreprise mère, tête de groupe sinon. */
+const roleOptions = computed(() =>
+    props.group.roles.filter((role) => (form.parent_id !== null ? props.group.member_roles : props.group.head_roles).includes(role.value)),
+);
+
+watch(
+    () => form.parent_id,
+    (parent) => {
+        if (parent !== null && !props.group.member_roles.includes(form.group_role ?? '')) {
+            form.group_role = 'subsidiary';
+        } else if (parent === null && form.group_role !== null && !props.group.head_roles.includes(form.group_role)) {
+            form.group_role = null;
+        }
+    },
+);
 
 const logoPreview = ref<string | null>(props.client?.logo_url ?? null);
 const title = computed(() => (props.client ? 'Modifier le client' : 'Nouveau client'));
@@ -143,6 +174,37 @@ function submit(): void {
                 </FormField>
                 <CheckboxInput v-if="client?.logo_url" id="remove_logo" v-model="form.remove_logo" label="Supprimer le logo actuel" class="mt-2" />
             </div>
+        </FormSection>
+
+        <FormSection title="Groupe" description="Rattachement à une entreprise mère (siège, holding) : les entreprises d'un groupe s'affichent ensemble dans la liste des clients.">
+            <FormField id="parent_id" label="Entreprise mère" :error="form.errors.parent_id" :hint="group.has_members ? 'Ce client a déjà des entreprises rattachées : elles le suivent dans le groupe choisi.' : undefined">
+                <template #default="{ describedBy, invalid }">
+                    <p v-if="group.parent_hidden" class="rounded-field border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600" :aria-describedby="describedBy">
+                        Rattaché à une entreprise qui ne vous est pas attribuée.
+                    </p>
+                    <SelectInput
+                        v-else
+                        id="parent_id"
+                        v-model="form.parent_id"
+                        :options="group.parents"
+                        placeholder="— Aucune : indépendant ou tête de groupe —"
+                        :described-by="describedBy"
+                        :invalid="invalid"
+                    />
+                </template>
+            </FormField>
+            <FormField id="group_role" label="Rôle dans le groupe" :error="form.errors.group_role" :required="form.parent_id !== null">
+                <template #default="{ describedBy, invalid }">
+                    <SelectInput
+                        id="group_role"
+                        v-model="form.group_role"
+                        :options="roleOptions"
+                        :placeholder="form.parent_id === null ? '— Indépendant —' : undefined"
+                        :described-by="describedBy"
+                        :invalid="invalid"
+                    />
+                </template>
+            </FormField>
         </FormSection>
 
         <FormSection title="Coordonnées" description="Adresse du siège ; les autres établissements se gèrent dans « Sites ».">

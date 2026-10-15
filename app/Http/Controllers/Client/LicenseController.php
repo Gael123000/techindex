@@ -10,7 +10,9 @@ use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LicenseRequest;
 use App\Models\Client;
+use App\Models\IntegrationAccount;
 use App\Models\License;
+use App\Services\Integrations\IntegrationRegistry;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -110,6 +112,7 @@ class LicenseController extends Controller
                 'status_label' => $license->status->label(),
                 'billing_period_label' => $license->billing_period?->label(),
             ],
+            'source' => $this->source($license),
             'history' => $this->historyFor($license, $request->user()),
             'extension' => $this->extensionDisplay('license', $client, $license, ['kind' => $license->kind->value, 'status' => $license->status->value]),
             'warnDays' => (int) config('techindex.alerts.license_days'),
@@ -127,6 +130,7 @@ class LicenseController extends Controller
         return Inertia::render('Licenses/Form', [
             'context' => $this->context($client, $request),
             'license' => [...$license->toArray(), 'equipment_ids' => $license->equipment()->pluck('equipment.id')],
+            'source' => $this->source($license),
             'extension' => $this->extensionForm('license', $client, $license),
             ...$this->formOptions($client),
         ]);
@@ -162,6 +166,26 @@ class LicenseController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Intégration d'où provient la licence (nom du connecteur et du compte).
+     *
+     * @return array{label: string, account: string, synced_at: ?string}|null
+     */
+    private function source(License $license): ?array
+    {
+        if (! $license->isSynced()) {
+            return null;
+        }
+
+        $account = IntegrationAccount::query()->with('integration:id,provider')->find($license->integration_account_id, ['id', 'integration_id', 'name']);
+
+        return $account === null ? null : [
+            'label' => app(IntegrationRegistry::class)->label((string) $account->integration?->provider),
+            'account' => $account->name,
+            'synced_at' => $license->synced_at?->toIso8601String(),
+        ];
+    }
+
     private function formOptions(Client $client): array
     {
         return [

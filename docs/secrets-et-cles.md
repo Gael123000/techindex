@@ -12,32 +12,46 @@ services, clés d'API, clés partagées VPN...
 | Clé dédiée | `SECRETS_KEY`, distincte d'`APP_KEY` : la compromission de l'une n'expose pas l'autre usage |
 | Clé identifiée | Chaque secret stocke l'empreinte de la clé utilisée (`secret_key_id`), ce qui permet la rotation |
 | Masqué par défaut | Les pages ne contiennent jamais la valeur, seulement l'indication « secret enregistré » |
-| Révélation contrôlée | Requête dédiée, droit « secrets » sur le client, confirmation du mot de passe datant de moins de 10 minutes, 20 révélations par minute au plus, réponse `no-store`, masquage automatique après 30 secondes |
+| Révélation contrôlée | Requête dédiée, droit « secrets » sur le client, mots de passe déverrouillés par **clé d'accès** depuis moins de 5 minutes (sur une fiche comme dans le gestionnaire), 20 révélations par minute au plus, réponse `no-store`, masquage automatique après 30 secondes |
 | Traçabilité | Chaque révélation ou copie est journalisée (qui, quand, quel accès, résultat), **sans la valeur** |
 | Jamais ailleurs | Absent des journaux, de l'audit (modification notée « [masqué] »), de la recherche, des notifications, des exports et des messages d'erreur |
 | Sauvegardes | Les secrets y figurent chiffrés ; la clé n'y figure jamais |
+
+Les **identifiants d'API des intégrations** (clés, secrets d'application,
+jetons de rafraîchissement, mots de passe de comptes d'API) sont chiffrés de
+la même façon, avec la même clé, par un module dédié
+(`App\Secrets\IntegrationSecrets`). Ils ne sont déchiffrés que pour appeler le
+service externe : jamais renvoyés à l'interface (seule l'indication
+« enregistré » s'affiche), jamais journalisés ; l'historique note seulement
+le nom du champ modifié.
 
 Les **mots de passe de connexion** des utilisateurs sont hachés (bcrypt) et
 indéchiffrables. Les secrets clients sont, eux, chiffrés et déchiffrables par
 les utilisateurs autorisés : c'est l'objet même de ce module.
 
-### Gestionnaire de mots de passe
+### Déverrouillage par clé d'accès (gestionnaire et fiches)
 
 Le gestionnaire (menu **Mots de passe**) présente les mêmes accès que les
-fiches, avec un niveau de protection supplémentaire :
+fiches. Un **verrou unique** protège les deux : afficher ou copier un mot de
+passe depuis une fiche (équipement, service, liste des accès) demande la même
+clé d'accès que l'ouverture du gestionnaire, et un déverrouillage depuis l'un
+vaut pour l'autre pendant 5 minutes.
 
 | Mesure | Mise en œuvre |
 |--------|---------------|
-| Coffre verrouillé | Toutes ses pages et actions exigent un déverrouillage par **clé d'accès** (WebAuthn, vérification de l'utilisateur par biométrie ou code PIN obligatoire). Un mot de passe, même confirmé, ne suffit pas. |
+| Mots de passe verrouillés | Les pages et actions du gestionnaire, et toute révélation ou copie d'un secret depuis une fiche, exigent un déverrouillage par **clé d'accès** (WebAuthn, vérification de l'utilisateur par biométrie ou code PIN obligatoire). Un mot de passe, même confirmé, ne suffit pas. Sur une fiche, une fenêtre propose le déverrouillage puis relance la demande. |
 | Défi à usage unique | Chaque vérification utilise un défi aléatoire conservé en session pour un seul usage (connexion, confirmation ou coffre) : une réponse ne peut être ni rejouée, ni réutilisée pour un autre usage. |
 | Clés de l'utilisateur seulement | Seules les clés d'accès de l'utilisateur connecté sont proposées et acceptées. |
-| Reverrouillage | Après `VAULT_IDLE_TIMEOUT` secondes d'inactivité (300 par défaut), au bout de `VAULT_MAX_UNLOCK` secondes (1 800) même en cas d'activité, à la déconnexion, à la suppression d'une clé d'accès, ou manuellement. L'état est propre à la session. |
+| Reverrouillage | **5 minutes après l'ouverture, même en cas d'activité** (durée fixe, non configurable : `VaultLock::DURATION`), à la déconnexion, à la suppression d'une clé d'accès, ou manuellement (bouton **Verrouiller** du gestionnaire ou de la barre supérieure). L'état est propre à la session ; le temps restant est affiché dans la barre supérieure. |
 | Mêmes règles ensuite | Droit « secrets », limitation du débit, réponse `no-store`, masquage après 30 secondes, audit sans la valeur. |
 | Traçabilité | Ouvertures et échecs d'ouverture journalisés (catégorie « Secrets » du journal d'audit). |
 | Pages non mises en cache | Les pages du gestionnaire sont servies avec `Cache-Control: no-store`. |
 
 Les clés d'accès s'ajoutent dans **Mon profil**, après confirmation de
-l'identité. Seule leur clé **publique** est enregistrée (table `passkeys`) :
+l'identité : on choisit le type de clé dans une liste (Windows Hello,
+Touch ID / Face ID, Android, clé de sécurité, gestionnaire de mots de passe,
+autre), avec une précision facultative pour distinguer plusieurs clés
+(« PC du bureau »). Seule leur clé **publique** est enregistrée (table `passkeys`) :
 la clé privée ne quitte jamais l'appareil. Une clé d'accès est liée au domaine
 d'`APP_URL` (`PASSKEYS_RP_ID`) : changer de domaine rend les clés existantes
 inutilisables. Une perte d'appareil se traite par **Réinitialiser la double
@@ -176,6 +190,8 @@ lieu d'un redémarrage des conteneurs.
 ```
 
 ### Après la rotation
+
+`techindex:secrets-rotate` rechiffre aussi les identifiants des intégrations.
 
 - **Exportez à nouveau les clés** (`keys-export`) et remplacez l'ancien export.
 - Gardez l'ancienne clé dans `SECRETS_PREVIOUS_KEYS` **tant que des sauvegardes

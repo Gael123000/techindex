@@ -38,8 +38,8 @@ final class AuditPresenter
         'auth.passkey_used' => 'Vérification par clé d\'accès',
         'auth.passkey_failed' => 'Échec de vérification par clé d\'accès',
         'auth.passkeys_reset' => 'Clés d\'accès réinitialisées',
-        'vault.unlocked' => 'Déverrouillage du gestionnaire de mots de passe',
-        'vault.unlock_failed' => 'Échec de déverrouillage du gestionnaire de mots de passe',
+        'vault.unlocked' => 'Déverrouillage des mots de passe',
+        'vault.unlock_failed' => 'Échec de déverrouillage des mots de passe',
         'user.role_changed' => 'Changement de rôle',
         'user.deactivated' => 'Désactivation du compte',
         'user.reactivated' => 'Réactivation du compte',
@@ -61,6 +61,13 @@ final class AuditPresenter
         'update.requested' => 'Demande de mise à jour de l\'application',
         'update.completed' => 'Mise à jour de l\'application',
         'update.failed' => 'Échec de la mise à jour de l\'application',
+        'integration.synced' => 'Synchronisation d\'une intégration',
+        'integration.licenses_synced' => 'Licences synchronisées par une intégration',
+        'integration.tested' => 'Test de connexion d\'une intégration',
+        'integration.account_linked' => 'Compte d\'une intégration rattaché à un client',
+        'integration.account_unlinked' => 'Compte d\'une intégration détaché',
+        'integration.account_added' => 'Compte ajouté à une intégration',
+        'integration.account_removed' => 'Compte retiré d\'une intégration',
     ];
 
     private const TYPES = [
@@ -91,6 +98,7 @@ final class AuditPresenter
         'tag' => 'Étiquette',
         'user' => 'Utilisateur',
         'import' => 'Import',
+        'integration' => 'Intégration',
     ];
 
     /**
@@ -176,6 +184,7 @@ final class AuditPresenter
             'vlan', 'subnet' => $client ? route('clients.network.index', $client) : null,
             'user' => $viewer?->isAdmin() ? route('admin.users.edit', $id) : null,
             'import' => route('imports.show', $id),
+            'integration' => $viewer?->isAdmin() ? route('admin.integrations.index') : null,
             default => null,
         };
     }

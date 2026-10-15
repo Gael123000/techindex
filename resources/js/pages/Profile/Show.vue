@@ -8,15 +8,34 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
 import Modal from '@/components/Modal.vue';
-import NameModal from '@/components/NameModal.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import PasskeyModal from '@/components/PasskeyModal.vue';
 import TextInput from '@/components/TextInput.vue';
 import { ensurePasswordConfirmed } from '@/composables/usePasswordConfirmation';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
+import { HttpError } from '@/lib/http';
 import { passkeysSupported, registerPasskey } from '@/lib/webauthn';
+import type { Option } from '@/types';
 
 defineOptions({ layout: AppLayout });
+
+interface Passkey {
+    id: number;
+    type: string;
+    type_label: string;
+    name: string;
+    detail: string | null;
+    authenticator: string | null;
+    created_at: string;
+    last_used_at: string | null;
+}
+
+interface PasskeyErrors {
+    type?: string;
+    name?: string;
+    general?: string;
+}
 
 const props = defineProps<{
     profile: {
@@ -34,92 +53,124 @@ const props = defineProps<{
         setup: { qr_svg: string; secret_key: string } | null;
         recovery_codes: string[] | null;
     };
-    passkeys: Array<{ id: number; name: string; authenticator: string | null; created_at: string; last_used_at: string | null }>;
+    passkeys: Passkey[];
+    passkeyTypes: Option[];
     sessions: Array<{ id: string; ip_address: string | null; user_agent: string; last_active_at: string; is_current: boolean }>;
     status: string | null;
 }>();
 
-/* Clés d'accès : ajout (après confirmation de l'identité), renommage, suppression. */
+/* Clés d'accès : ajout (après confirmation de l'identité), modification, suppression. */
 const passkeysAvailable = ref(true);
 const passkeyModal = reactive({
     show: false,
-    mode: 'create' as 'create' | 'rename',
-    passkey: null as { id: number; name: string } | null,
-    initial: '',
-    error: undefined as string | undefined,
+    mode: 'create' as 'create' | 'edit',
+    passkey: null as Passkey | null,
+    initialType: '',
+    initialDetail: null as string | null,
+    errors: {} as PasskeyErrors,
     processing: false,
 });
-const passkeyToDelete = ref<{ id: number; name: string } | null>(null);
+const passkeyToDelete = ref<Passkey | null>(null);
 
 onMounted(() => {
     passkeysAvailable.value = passkeysSupported();
 });
 
-function suggestedPasskeyName(): string {
+/**
+ * Type proposé d'après l'appareil utilisé ; l'utilisateur peut le changer.
+ */
+function suggestedPasskeyType(): string {
     const agent = navigator.userAgent;
 
-    if (/iPhone|iPad/.test(agent)) {
-        return 'iPhone / iPad';
+    if (/iPhone|iPad|Mac OS/.test(agent)) {
+        return 'apple';
     }
 
     if (/Android/.test(agent)) {
-        return 'Téléphone Android';
+        return 'android';
     }
 
-    if (/Windows/.test(agent)) {
-        return 'Windows Hello';
-    }
+    return /Windows/.test(agent) ? 'windows_hello' : 'security_key';
+}
 
-    return /Mac OS/.test(agent) ? 'Mac' : 'Clé d\'accès';
+/**
+ * Libellé de l'authentificateur détecté, s'il apporte une information.
+ */
+function authenticatorHint(passkey: Passkey): string | null {
+    return passkey.authenticator && ![passkey.name, passkey.type_label].includes(passkey.authenticator) ? passkey.authenticator : null;
 }
 
 async function startAddPasskey(): Promise<void> {
     working.value = true;
 
     try {
-        if (await ensurePasswordConfirmed('default')) {
-            Object.assign(passkeyModal, { show: true, mode: 'create', passkey: null, initial: suggestedPasskeyName(), error: undefined, processing: false });
+        if (await ensurePasswordConfirmed()) {
+            Object.assign(passkeyModal, {
+                show: true,
+                mode: 'create',
+                passkey: null,
+                initialType: suggestedPasskeyType(),
+                initialDetail: null,
+                errors: {},
+                processing: false,
+            });
         }
     } finally {
         working.value = false;
     }
 }
 
-function startRenamePasskey(passkey: { id: number; name: string }): void {
-    Object.assign(passkeyModal, { show: true, mode: 'rename', passkey, initial: passkey.name, error: undefined, processing: false });
+function startEditPasskey(passkey: Passkey): void {
+    Object.assign(passkeyModal, {
+        show: true,
+        mode: 'edit',
+        passkey,
+        initialType: passkey.type,
+        initialDetail: passkey.detail,
+        errors: {},
+        processing: false,
+    });
 }
 
-async function submitPasskey(name: string): Promise<void> {
-    passkeyModal.processing = true;
-    passkeyModal.error = undefined;
+function passkeyErrors(exception: unknown): PasskeyErrors {
+    if (exception instanceof HttpError && exception.status === 422 && exception.payload.errors) {
+        const errors = exception.payload.errors as Record<string, string[] | undefined>;
 
-    if (passkeyModal.mode === 'rename' && passkeyModal.passkey) {
-        router.put(
-            route('profile.passkeys.update', passkeyModal.passkey.id),
-            { name },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    passkeyModal.show = false;
-                },
-                onError: (errors) => {
-                    passkeyModal.error = errors.name;
-                },
-                onFinish: () => {
-                    passkeyModal.processing = false;
-                },
+        if (errors.type || errors.name) {
+            return { type: errors.type?.[0], name: errors.name?.[0] };
+        }
+    }
+
+    return { general: exception instanceof Error ? exception.message : 'L\'ajout de la clé d\'accès a échoué.' };
+}
+
+async function submitPasskey(description: { type: string; name: string | null }): Promise<void> {
+    passkeyModal.processing = true;
+    passkeyModal.errors = {};
+
+    if (passkeyModal.mode === 'edit' && passkeyModal.passkey) {
+        router.put(route('profile.passkeys.update', passkeyModal.passkey.id), description, {
+            preserveScroll: true,
+            onSuccess: () => {
+                passkeyModal.show = false;
             },
-        );
+            onError: (errors) => {
+                passkeyModal.errors = { type: errors.type, name: errors.name };
+            },
+            onFinish: () => {
+                passkeyModal.processing = false;
+            },
+        });
 
         return;
     }
 
     try {
-        await registerPasskey(route('profile.passkeys.options'), route('profile.passkeys.store'), name);
+        await registerPasskey(route('profile.passkeys.options'), route('profile.passkeys.store'), description);
         passkeyModal.show = false;
         router.reload();
     } catch (exception) {
-        passkeyModal.error = exception instanceof Error ? exception.message : 'L\'ajout de la clé d\'accès a échoué.';
+        passkeyModal.errors = passkeyErrors(exception);
     } finally {
         passkeyModal.processing = false;
     }
@@ -163,7 +214,7 @@ async function withConfirmation(action: () => void): Promise<void> {
     working.value = true;
 
     try {
-        if (await ensurePasswordConfirmed('default')) {
+        if (await ensurePasswordConfirmed()) {
             action();
         }
     } finally {
@@ -393,15 +444,16 @@ function logoutOtherSessions(): void {
                     <div class="min-w-0 flex-1">
                         <p class="font-medium text-slate-800">
                             {{ passkey.name }}
-                            <span v-if="passkey.authenticator" class="ml-1 text-xs font-normal text-slate-500">({{ passkey.authenticator }})</span>
+                            <span v-if="passkey.detail" class="ml-1 text-xs font-normal text-slate-500">{{ passkey.type_label }}</span>
+                            <span v-if="authenticatorHint(passkey)" class="ml-1 text-xs font-normal text-slate-500">({{ authenticatorHint(passkey) }})</span>
                         </p>
                         <p class="text-xs text-slate-500">
                             Ajoutée le {{ formatDateTime(passkey.created_at) }} ·
                             {{ passkey.last_used_at ? `dernière utilisation le ${formatDateTime(passkey.last_used_at)}` : 'jamais utilisée' }}
                         </p>
                     </div>
-                    <button type="button" class="btn-ghost btn-sm" @click="startRenamePasskey(passkey)">
-                        <Pencil class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">Renommer {{ passkey.name }}</span>
+                    <button type="button" class="btn-ghost btn-sm" @click="startEditPasskey(passkey)">
+                        <Pencil class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">Modifier {{ passkey.name }}</span>
                     </button>
                     <button type="button" class="btn-ghost btn-sm text-red-700" @click="passkeyToDelete = passkey">
                         <Trash2 class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">Supprimer {{ passkey.name }}</span>
@@ -466,14 +518,13 @@ function logoutOtherSessions(): void {
         </template>
     </Modal>
 
-    <NameModal
+    <PasskeyModal
         :show="passkeyModal.show"
-        :title="passkeyModal.mode === 'create' ? 'Nouvelle clé d\'accès' : 'Renommer la clé d\'accès'"
-        label="Nom de la clé"
-        hint="Pour la reconnaître : « PC du bureau », « iPhone », « YubiKey de secours »…"
-        :initial="passkeyModal.initial"
-        :submit-label="passkeyModal.mode === 'create' ? 'Continuer' : 'Renommer'"
-        :error="passkeyModal.error"
+        :mode="passkeyModal.mode"
+        :types="passkeyTypes"
+        :initial-type="passkeyModal.initialType"
+        :initial-detail="passkeyModal.initialDetail"
+        :errors="passkeyModal.errors"
         :processing="passkeyModal.processing"
         @close="passkeyModal.show = false"
         @submit="submitPasskey"

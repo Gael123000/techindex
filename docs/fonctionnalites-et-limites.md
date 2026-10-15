@@ -67,7 +67,8 @@ Voir [secrets-et-cles.md](secrets-et-cles.md).
 - Métadonnées (libellé, type, hôte ou URL, identifiant) séparées du secret.
 - Secret chiffré en AES-256-GCM avec une clé dédiée, et masqué par défaut.
 - Révélation et copie :
-  - droit « secrets » et confirmation récente du mot de passe ;
+  - droit « secrets » et déverrouillage par clé d'accès datant de moins de
+    5 minutes, sur une fiche comme dans le gestionnaire ;
   - limitation du débit et réponse `no-store` ;
   - masquage automatique ;
   - audit sans la valeur.
@@ -91,8 +92,9 @@ Voir [secrets-et-cles.md](secrets-et-cles.md).
   indicateur de robustesse.
 - **Coffre verrouillé** : il ne s'ouvre qu'avec une clé d'accès (vérification
   biométrique ou code PIN de l'appareil). Le mot de passe, même confirmé, ne
-  suffit pas. Reverrouillage après 5 minutes d'inactivité et au bout de
-  30 minutes dans tous les cas, ou manuellement. Chaque ouverture est auditée.
+  suffit pas. Le même verrou protège l'affichage des secrets sur les fiches.
+  Reverrouillage 5 minutes après l'ouverture, même en cas d'activité, ou
+  manuellement. Chaque ouverture est auditée.
 
 ### Explorateur de fichiers
 
@@ -172,9 +174,9 @@ Voir [secrets-et-cles.md](secrets-et-cles.md).
 - Double authentification TOTP avec codes de secours, éventuellement
   obligatoire par rôle.
 - Clés d'accès (WebAuthn / FIDO2 : Windows Hello, Touch ID / Face ID,
-  téléphone, clés de sécurité USB ou NFC) : second facteur après le mot de
-  passe, confirmation des actions sensibles, ouverture du gestionnaire de mots
-  de passe.
+  téléphone, clés de sécurité USB ou NFC, type choisi dans une liste) : second
+  facteur après le mot de passe, confirmation des actions sensibles,
+  déverrouillage des mots de passe.
 - Comptes désactivables avec révocation immédiate des sessions.
 - Limitation des tentatives, expiration des sessions (inactivité et durée
   absolue), mot de passe temporaire à changer.
@@ -198,6 +200,46 @@ Voir [secrets-et-cles.md](secrets-et-cles.md).
 ### Interface
 
 - En français, responsive (menu latéral repliable sur mobile).
+- Menu latéral réductible aux icônes sur grand écran (libellés en infobulle) ;
+  les catégories (Administration) sont regroupées en bas, se déplient et se
+  replient. Ces choix sont mémorisés dans le navigateur.
+- **Onglets**, comme dans un navigateur : bouton « + », la navigation reste
+  dans l'onglet actif, fermeture par la croix ou le clic molette,
+  réorganisation par glisser-déposer, menu clic droit (actualiser, dupliquer,
+  fermer les autres ou ceux de droite). Les onglets sont sauvegardés dans le
+  navigateur et retrouvés après une actualisation, une déconnexion ou le
+  lendemain ; les boutons Précédent / Suivant du navigateur repassent d'un
+  onglet à l'autre.
+- **Menu contextuel** de TechIndex au clic droit sur un lien interne (menu,
+  listes, fil d'Ariane) : ouvrir dans un nouvel onglet, en arrière-plan, dans
+  une nouvelle fenêtre, copier le lien. Clic molette ou Ctrl+clic ouvrent un
+  onglet en arrière-plan ; Maj+clic droit rend le menu du navigateur.
+- Recherche globale compacte à droite de l'en-tête (Ctrl+K ou « / »), simple
+  icône sur petit écran.
+
+### Groupes d'entreprises
+
+- Un client peut être rattaché à une entreprise mère : filiale,
+  établissement / agence ou franchisé ; la tête de groupe est un siège social
+  ou une holding. Jusqu'à trois niveaux (siège, filiale, établissement).
+- Liste des clients : les entreprises rattachées s'affichent sous leur
+  entreprise mère, décalées sur un fond plus sombre ; chaque groupe se replie
+  (déplié par défaut, choix mémorisé). Avec une recherche ou un filtre, la
+  liste redevient simple et indique l'entreprise mère.
+- Fiche client : carte « Groupe » (entreprise mère, entreprises rattachées,
+  bouton « Ajouter une entreprise ») ; rattachement rappelé dans l'en-tête de
+  toutes les pages du client.
+- Droits : seule une entreprise attribuée à l'utilisateur peut être choisie
+  comme mère ; une entreprise mère non attribuée n'est jamais nommée.
+
+### Intégrations
+
+- Treize connecteurs (Microsoft 365, Partner Center, Google Workspace, Pax8,
+  TD SYNNEX, Arrow, Ingram Micro, ALSO, Crayon, Sophos, Bitdefender, ESET,
+  Acronis) : licences et abonnements importés et tenus à jour dans les
+  licences de chaque client rattaché, avec les licences attribuées quand le
+  service les fournit (Microsoft 365, Google, Sophos, Bitdefender, ESET,
+  Acronis). Voir docs/administration.md.
 - Navigation au clavier : lien d'évitement « Aller au contenu », modales avec
   piège du focus, libellés et descriptions ARIA des champs.
 - Tableaux paginés, triables et filtrables côté serveur.
@@ -326,6 +368,26 @@ Fonctionnelles :
     restent trouvés par préfixe ;
   - pas de tolérance aux fautes de frappe.
 - **Fuseau horaire** : un seul fuseau d'affichage pour toute l'installation.
+- **Onglets** :
+  - une seule page est affichée à la fois : revenir sur un onglet recharge sa
+    page depuis le serveur (données à jour) et une saisie non enregistrée
+    dans l'onglet quitté est perdue ;
+  - sauvegardés dans le navigateur de chaque poste (pas de synchronisation
+    entre ordinateurs) ; deux fenêtres ouvertes en même temps ont chacune
+    leurs onglets, la dernière modifiée est celle retrouvée plus tard ;
+  - 30 onglets au maximum.
+- **Groupes d'entreprises** : trois niveaux au maximum ; l'import CSV / Excel
+  ne renseigne pas encore l'entreprise mère (l'export l'indique).
+- **Intégrations** :
+  - connecteurs testés sur des réponses simulées au format documenté, pas sur
+    des comptes réels ; ceux marqués « Bêta » s'appuient en partie sur une
+    documentation incomplète ;
+  - lecture seule : aucune commande ni modification n'est envoyée aux
+    fournisseurs ;
+  - Microsoft Partner Center ne fournit pas les licences attribuées (utilisez
+    le connecteur Microsoft 365) ; Acronis et ESET (hors essais) n'ont pas de
+    date d'échéance (facturation à l'usage) ;
+  - pas encore de connecteur RMM (équipements) ni WithSecure / Veeam.
 
 Sécurité et exploitation :
 

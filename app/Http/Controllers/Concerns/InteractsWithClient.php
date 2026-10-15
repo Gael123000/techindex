@@ -157,13 +157,13 @@ trait InteractsWithClient
 
     /**
      * Accès (métadonnées uniquement) rattachés à un équipement, un service ou un lien Internet.
-     * La route de révélation dépend de l'écran : fiches (confirmation du mot
-     * de passe) ou gestionnaire de mots de passe (déverrouillé par clé d'accès).
+     * La même route de révélation sert les fiches et le gestionnaire de mots
+     * de passe : elle exige un déverrouillage par clé d'accès.
      *
      * @param  Collection<int, Credential>  $credentials
      * @return Collection<int, array<string, mixed>>
      */
-    protected function presentCredentials(Collection $credentials, Client $client, User $user, string $revealRoute = 'clients.credentials.reveal'): Collection
+    protected function presentCredentials(Collection $credentials, Client $client, User $user): Collection
     {
         $canReveal = $user->hasClientPermission($client, ClientPermission::Secrets);
 
@@ -184,7 +184,7 @@ trait InteractsWithClient
             'service' => $credential->relationLoaded('service') ? $credential->service?->only(['id', 'name']) : null,
             'internet_link' => $credential->relationLoaded('internetLink') ? $credential->internetLink?->only(['id', 'name']) : null,
             'folder' => $credential->relationLoaded('folder') ? $credential->folder?->only(['id', 'name']) : null,
-            'reveal_url' => $canReveal && $credential->has_secret ? route($revealRoute, [$client, $credential]) : null,
+            'reveal_url' => $canReveal && $credential->has_secret ? route('clients.credentials.reveal', [$client, $credential]) : null,
         ]);
     }
 

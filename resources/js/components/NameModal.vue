@@ -5,7 +5,7 @@ import Modal from './Modal.vue';
 import TextInput from './TextInput.vue';
 
 /**
- * Saisie d'un nom (création ou renommage d'un dossier, d'un fichier, d'une clé).
+ * Saisie d'un nom (création ou renommage d'un dossier, d'un fichier).
  */
 const props = withDefaults(
     defineProps<{

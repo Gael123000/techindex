@@ -9,7 +9,7 @@ import HistoryList from '@/components/HistoryList.vue';
 import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import type { AuditEntry, ClientContext, RecordPresentedSection } from '@/types';
 
 defineOptions({ layout: AppLayout });
@@ -27,6 +27,7 @@ defineProps<{
         supplier: string | null;
         contract_reference: string | null;
         quantity: number | null;
+        assigned_quantity: number | null;
         cost: string | null;
         purchase_date: string | null;
         starts_at: string | null;
@@ -38,6 +39,8 @@ defineProps<{
         site: { id: number; name: string } | null;
         equipment: Array<{ id: number; name: string; hostname: string | null }>;
     };
+    /** Intégration d'où provient la licence (null : saisie à la main). */
+    source: { label: string; account: string; synced_at: string | null } | null;
     history: AuditEntry[];
     warnDays: number;
     can: { update: boolean; delete: boolean };
@@ -64,11 +67,16 @@ defineProps<{
         <div class="space-y-5 xl:col-span-2">
             <section class="card p-5">
                 <div class="mb-4"><StatusBadge :status="license.status" :label="license.status_label" /></div>
+                <p v-if="source" class="mb-4 rounded-md border border-turquoise-200 bg-turquoise-50 px-3 py-2 text-xs text-turquoise-900">
+                    Synchronisée depuis <strong>{{ source.label }}</strong> (compte « {{ source.account }} »)<template v-if="source.synced_at">, le {{ formatDateTime(source.synced_at) }}</template>.
+                    Nom, quantités, dates et statut sont mis à jour automatiquement ; le site, le coût et les notes restent modifiables.
+                </p>
                 <dl class="dl-grid">
                     <div><dt>Éditeur</dt><dd>{{ license.publisher ?? '—' }}</dd></div>
                     <div><dt>Fournisseur</dt><dd>{{ license.supplier ?? '—' }}</dd></div>
                     <div><dt>Référence du contrat</dt><dd>{{ license.contract_reference ?? '—' }}</dd></div>
                     <div><dt>Quantité</dt><dd>{{ license.quantity ?? '—' }}</dd></div>
+                    <div v-if="license.assigned_quantity !== null"><dt>Attribuées ou utilisées</dt><dd>{{ license.assigned_quantity }}<template v-if="license.quantity"> sur {{ license.quantity }}</template></dd></div>
                     <div><dt>Périodicité</dt><dd>{{ license.billing_period_label ?? '—' }}</dd></div>
                     <div><dt>Coût</dt><dd>{{ formatCurrency(license.cost) }}</dd></div>
                     <div><dt>Date d'achat</dt><dd>{{ formatDate(license.purchase_date) }}</dd></div>

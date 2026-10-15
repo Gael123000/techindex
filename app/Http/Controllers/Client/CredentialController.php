@@ -25,9 +25,10 @@ use Inertia\Response;
  *
  * Les pages ne transmettent que des métadonnées. La valeur d'un secret
  * n'est envoyée qu'en réponse à POST .../reveal, après vérification du droit
- * "secrets", d'une confirmation récente du mot de passe et du quota de
- * révélations ; la réponse n'est jamais mise en cache et la demande est
- * journalisée sans sa valeur.
+ * "secrets", d'un déverrouillage par clé d'accès datant de moins de 5 minutes
+ * et du quota de révélations ; la réponse n'est jamais mise en cache et la
+ * demande est journalisée sans sa valeur. La même route sert les fiches et
+ * le gestionnaire de mots de passe.
  */
 class CredentialController extends Controller
 {

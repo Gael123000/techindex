@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PasskeyType;
 use App\Http\Middleware\RequireRecentPasswordConfirmation;
 use App\Models\Passkey;
 use App\Services\Audit\AuditLogger;
@@ -20,7 +21,7 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $status = $request->session()->get('status');
-        $recentlyConfirmed = RequireRecentPasswordConfirmation::isConfirmed($request, 'default');
+        $recentlyConfirmed = RequireRecentPasswordConfirmation::isConfirmed($request);
         $pendingSetup = $user->two_factor_secret !== null && $user->two_factor_confirmed_at === null;
 
         // Le QR code et la clé de configuration ne sont transmis que pendant
@@ -52,14 +53,18 @@ class ProfileController extends Controller
                 'setup' => $setup,
                 'recovery_codes' => $showRecoveryCodes ? $user->recoveryCodes() : null,
             ],
-            // Clés d'accès : nom, type d'authentificateur et dates, jamais la clé publique.
+            // Clés d'accès : type, nom, authentificateur et dates, jamais la clé publique.
             'passkeys' => $user->passkeys()->latest()->get()->map(fn (Passkey $passkey): array => [
                 'id' => $passkey->id,
+                'type' => $passkey->type->value,
+                'type_label' => $passkey->type->shortLabel(),
                 'name' => $passkey->name,
+                'detail' => $passkey->detail(),
                 'authenticator' => $passkey->authenticator,
                 'created_at' => $passkey->created_at?->toIso8601String(),
                 'last_used_at' => $passkey->last_used_at?->toIso8601String(),
             ]),
+            'passkeyTypes' => PasskeyType::options(),
             'sessions' => $this->sessions->list($user, $request->session()->getId()),
             'status' => $status,
         ]);

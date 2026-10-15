@@ -133,7 +133,7 @@ async function install(): Promise<void> {
     actionError.value = null;
 
     try {
-        if (!(await ensurePasswordConfirmed('default'))) {
+        if (!(await ensurePasswordConfirmed())) {
             return;
         }
 

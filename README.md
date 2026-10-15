@@ -216,11 +216,11 @@ Voir [docs/tests.md](docs/tests.md).
 - Les secrets clients (mots de passe d'accès, clés) sont chiffrés en AES-256-GCM
   avec une clé dédiée (`SECRETS_KEY`), distincte de `APP_KEY`. Ils sont masqués
   par défaut et ne sont envoyés au navigateur qu'à la demande. Chaque
-  révélation exige le droit « secrets » et une confirmation récente du mot de
-  passe, et elle est journalisée sans la valeur.
-- Le gestionnaire de mots de passe ne s'ouvre qu'avec une clé d'accès
-  (Windows Hello, téléphone, clé de sécurité), et se reverrouille après
-  quelques minutes d'inactivité.
+  révélation exige le droit « secrets » et un déverrouillage par clé d'accès,
+  et elle est journalisée sans la valeur.
+- Les mots de passe (gestionnaire et fiches) ne s'ouvrent qu'avec une clé
+  d'accès (Windows Hello, téléphone, clé de sécurité), et se reverrouillent
+  5 minutes après l'ouverture, même en cas d'activité.
 - Les contrôles d'accès sont faits côté serveur sur chaque route, téléchargement,
   recherche et export. Un client non attribué répond « introuvable » (404).
 - Les comptes sont créés sans mot de passe par défaut connu : pas

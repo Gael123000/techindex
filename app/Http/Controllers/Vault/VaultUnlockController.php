@@ -12,9 +12,10 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Déverrouillage du gestionnaire de mots de passe, uniquement par clé
- * d'accès avec vérification de l'utilisateur (biométrie ou code PIN) :
- * le mot de passe seul, même confirmé, ne suffit pas.
+ * Déverrouillage des mots de passe (gestionnaire et fiches), uniquement par
+ * clé d'accès avec vérification de l'utilisateur (biométrie ou code PIN) :
+ * le mot de passe seul, même confirmé, ne suffit pas. L'ouverture dure
+ * VaultLock::DURATION secondes, sans prolongation.
  */
 class VaultUnlockController extends Controller
 {
@@ -55,18 +56,6 @@ class VaultUnlockController extends Controller
             ->header('Cache-Control', 'no-store, private');
     }
 
-    /**
-     * Temps restant avant reverrouillage. Appelé par l'interface lorsque
-     * l'utilisateur est actif sur la page : prolonge la période d'inactivité
-     * (middleware), dans la limite de la durée maximale.
-     */
-    public function status(Request $request): JsonResponse
-    {
-        return response()
-            ->json(['expires_in' => VaultLock::expiresIn($request)])
-            ->header('Cache-Control', 'no-store, private');
-    }
-
     public function destroy(Request $request): RedirectResponse|JsonResponse
     {
         VaultLock::lock($request);
@@ -75,6 +64,6 @@ class VaultUnlockController extends Controller
             return response()->json(['locked' => true])->header('Cache-Control', 'no-store, private');
         }
 
-        return redirect()->route('vault.index')->with('success', 'Gestionnaire de mots de passe verrouillé.');
+        return redirect()->route('vault.index')->with('success', 'Mots de passe verrouillés.');
     }
 }

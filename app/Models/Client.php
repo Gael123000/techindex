@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ClientGroupRole;
 use App\Enums\ClientPermission;
 use App\Enums\RecordStatus;
 use App\Models\Concerns\Auditable;
@@ -18,12 +19,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
- * Entreprise cliente documentée dans TechIndex.
+ * Entreprise cliente documentée dans TechIndex. Un client peut être rattaché
+ * à une entreprise mère (groupe d'entreprises, voir ClientGroupRole).
  *
  * @property RecordStatus $status
+ * @property ClientGroupRole|null $group_role
  */
 #[Fillable([
-    'name', 'reference', 'description', 'account_manager_id',
+    'name', 'reference', 'description', 'account_manager_id', 'parent_id', 'group_role',
     'address_line1', 'address_line2', 'postal_code', 'city', 'country',
     'phone', 'email', 'website', 'notes',
 ])]
@@ -32,12 +35,17 @@ class Client extends Model
     /** @use HasFactory<ClientFactory> */
     use Auditable, HasFactory, HasTags, TracksAuthors;
 
+    /** Niveaux d'un groupe : tête de groupe, filiale, établissement de la filiale. */
+    public const MAX_GROUP_DEPTH = 3;
+
     protected $hidden = ['logo_path'];
 
     protected function casts(): array
     {
         return [
             'status' => RecordStatus::class,
+            'group_role' => ClientGroupRole::class,
+            'parent_id' => 'integer',
             'archived_at' => 'datetime',
         ];
     }
@@ -66,7 +74,10 @@ class Client extends Model
 
     protected function auditRelations(): array
     {
-        return ['account_manager_id' => [User::class, 'name']];
+        return [
+            'account_manager_id' => [User::class, 'name'],
+            'parent_id' => [Client::class, 'name'],
+        ];
     }
 
     protected function auditExcluded(): array
@@ -80,6 +91,90 @@ class Client extends Model
     public function accountManager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'account_manager_id');
+    }
+
+    /**
+     * Entreprise mère (siège, holding ou filiale de niveau supérieur).
+     *
+     * @return BelongsTo<Client, $this>
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Client::class, 'parent_id');
+    }
+
+    /**
+     * Entreprises rattachées directement à ce client.
+     *
+     * @return HasMany<Client, $this>
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(Client::class, 'parent_id');
+    }
+
+    /**
+     * Identifiants de toutes les entreprises rattachées, à tous les niveaux.
+     *
+     * @return list<int>
+     */
+    public function descendantIds(): array
+    {
+        $ids = [];
+        $level = [$this->getKey()];
+
+        // Nombre de niveaux borné : garde-fou si des données incohérentes formaient une boucle.
+        for ($depth = 0; $depth < 10 && $level !== []; $depth++) {
+            $level = array_values(array_diff(
+                static::query()->whereIn('parent_id', $level)->pluck('id')->all(),
+                $ids,
+                [$this->getKey()],
+            ));
+            $ids = [...$ids, ...$level];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Niveau dans le groupe : 1 pour une tête de groupe ou un client indépendant.
+     */
+    public function groupDepth(): int
+    {
+        $depth = 1;
+        $parentId = $this->parent_id;
+        $seen = [$this->getKey()];
+
+        while ($parentId !== null && ! in_array($parentId, $seen, true) && $depth < 10) {
+            $seen[] = $parentId;
+            $depth++;
+            $parentId = static::query()->whereKey($parentId)->value('parent_id');
+        }
+
+        return $depth;
+    }
+
+    /**
+     * Nombre de niveaux d'entreprises rattachées sous ce client (0 : aucune).
+     */
+    public function groupHeight(): int
+    {
+        $height = 0;
+        $level = [$this->getKey()];
+        $seen = [$this->getKey()];
+
+        while ($height < 10) {
+            $level = array_values(array_diff(static::query()->whereIn('parent_id', $level)->pluck('id')->all(), $seen));
+
+            if ($level === []) {
+                break;
+            }
+
+            $seen = [...$seen, ...$level];
+            $height++;
+        }
+
+        return $height;
     }
 
     /**

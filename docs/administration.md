@@ -115,18 +115,22 @@ changé à la première connexion.
 ### Clés d'accès (WebAuthn)
 
 - Chaque utilisateur ajoute ses clés dans **Mon profil**, après confirmation de
-  son identité : Windows Hello, Touch ID / Face ID, téléphone (Android, iPhone)
-  ou clé de sécurité USB / NFC (YubiKey...). La vérification biométrique ou par
+  son identité, en choisissant le type dans une liste : Windows Hello,
+  Touch ID / Face ID, téléphone Android, clé de sécurité USB / NFC (YubiKey...)
+  ou gestionnaire de mots de passe. La vérification biométrique ou par
   code PIN est exigée. Conseillez d'en enregistrer au moins deux (par exemple
   le poste et une clé de secours).
 - À la connexion, une clé d'accès remplace le code TOTP comme second facteur,
   après le mot de passe. Elle peut aussi confirmer les actions sensibles.
-- **Le gestionnaire de mots de passe ne s'ouvre qu'avec une clé d'accès.**
+- **Les mots de passe ne s'affichent qu'après un déverrouillage par clé
+  d'accès**, dans le gestionnaire comme sur les fiches (équipements, services).
+  Un utilisateur sans clé d'accès ne peut donc plus révéler de secret.
 - Les navigateurs n'acceptent les clés d'accès qu'en HTTPS (ou sur
   `localhost`). Elles sont liées au domaine d'`APP_URL` ; `PASSKEYS_RP_ID` et
   `PASSKEYS_ALLOWED_ORIGINS` permettent de le préciser derrière un reverse proxy.
-- `VAULT_IDLE_TIMEOUT` et `VAULT_MAX_UNLOCK` règlent le reverrouillage du
-  gestionnaire (en secondes).
+- Le déverrouillage dure 5 minutes, même en cas d'activité. Cette durée est
+  fixe : les anciens paramètres `VAULT_IDLE_TIMEOUT` et `VAULT_MAX_UNLOCK` ne
+  sont plus lus.
 
 ### Sessions
 
@@ -135,7 +139,6 @@ changé à la première connexion.
 | `SESSION_LIFETIME` | 120 min | Expiration après inactivité |
 | `SESSION_ABSOLUTE_LIFETIME` | 720 min | Durée maximale d'une session, même active |
 | `AUTH_PASSWORD_TIMEOUT` | 900 s | Validité d'une confirmation de mot de passe (actions sensibles du profil) |
-| `SECRETS_REAUTH_TIMEOUT` | 600 s | Validité de la confirmation pour révéler un secret |
 | `SECRETS_REVEAL_PER_MINUTE` | 20 | Nombre maximal de révélations par minute et par utilisateur |
 
 Chaque utilisateur voit ses sessions actives dans **Mon profil** et peut fermer
@@ -191,6 +194,60 @@ Menu **Administration** (administrateurs uniquement) :
   remplace le logo fourni. Un opérateur utilisé par un lien ne peut pas être
   supprimé : décochez « Proposé dans les formulaires » pour le masquer.
 - **Étiquettes** : nom et couleur, partagées entre clients, éléments et documents.
+- **Intégrations** : licences et abonnements remontés automatiquement depuis
+  les distributeurs et consoles d'éditeurs (voir ci-dessous).
+
+### Intégrations
+
+Chaque intégration se configure avec un compte d'API créé chez le
+fournisseur ; les étapes sont rappelées sur sa page. Connecteurs livrés :
+
+| Famille | Connecteurs |
+|---------|-------------|
+| Microsoft et Google | Microsoft 365 (Graph, un locataire par client), Microsoft Partner Center (CSP), Google Workspace (revendeur) |
+| Distributeurs | Pax8, TD SYNNEX StreamOne Ion, Arrow ArrowSphere, Ingram Micro Cloud Marketplace, ALSO Cloud Marketplace, Crayon Cloud-iQ |
+| Sécurité | Sophos Central Partner, Bitdefender GravityZone, ESET PROTECT Hub (MSP) |
+| Sauvegarde | Acronis Cyber Protect Cloud |
+
+Les connecteurs marqués **Bêta** ont été réalisés d'après la documentation
+publique du fournisseur, sans compte réel de test : utilisez « Tester la
+connexion » et vérifiez la première synchronisation.
+
+Fonctionnement :
+
+1. **Configuration** : identifiants d'API (chiffrés avec la clé des secrets,
+   jamais réaffichés : un champ laissé vide conserve la valeur enregistrée),
+   réglages (région, adresse de l'API limitée aux domaines du fournisseur),
+   fréquence de synchronisation (manuelle, toutes les 6 heures, quotidienne).
+2. **Comptes** : la première synchronisation récupère les clients (ou
+   locataires) du fournisseur. Rattachez chacun à un client TechIndex ; le
+   bouton « Rattacher les suggestions » associe ceux dont le nom (sans forme
+   juridique) ou le domaine correspond à un seul client. Un compte peut être
+   ignoré.
+3. **Licences** : pour chaque compte rattaché, les licences et abonnements sont
+   ajoutés ou mis à jour dans l'onglet « Licences » du client (produit,
+   éditeur, quantité, licences attribuées quand le service les fournit,
+   dates, périodicité, renouvellement). Un abonnement disparu chez le
+   fournisseur passe « Résiliée ». Les licences saisies à la main ne sont
+   jamais modifiées ; sur une licence synchronisée, le site, le coût, le
+   préavis, les équipements et les notes restent modifiables.
+
+Particularités :
+
+- **Microsoft 365** : créez une application Entra ID multilocataire
+  (permission d'application `Organization.Read.All`) avec l'adresse de retour
+  affichée sur la page. Pour chaque client, le « Lien de consentement » doit
+  être ouvert par un administrateur général de son locataire ; le locataire
+  est ajouté et vérifié au retour, ou peut être ajouté ensuite par son domaine.
+- **TD SYNNEX StreamOne Ion** : le jeton de rafraîchissement n'est valable
+  qu'une fois et 32 jours ; TechIndex enregistre le nouveau à chaque
+  connexion. Gardez la synchronisation automatique active.
+- **ALSO** et **ESET** utilisent un compte utilisateur dédié (sans double
+  authentification pour ALSO) ; **Crayon** exige un client d'API et un
+  utilisateur Cloud-iQ.
+
+Supprimer une intégration efface ses identifiants, ses comptes et son
+historique ; les licences déjà importées restent chez les clients.
 
 ### Constructeur de fiches
 
@@ -337,6 +394,8 @@ Le planificateur (service `scheduler` avec Docker, tâche planifiée
 | 02:45 | Purge des jetons de réinitialisation expirés |
 | 03:00 | Purge des tâches en échec de plus de 30 jours |
 | 03:15 | Contrôle que tous les secrets restent déchiffrables (`techindex:secrets-check`) |
+| Chaque heure (h17) | Synchronisation des intégrations arrivées à échéance (`techindex:integrations-sync`) |
+| Lundi 04:10 | Mise à jour de la liste officielle des noms de licences Microsoft |
 | 04:10 | Recherche d'une nouvelle version (`techindex:update-check`), si le canal est configuré et `UPDATE_CHECK_ENABLED` vrai |
 | Chaque minute | Témoin d'activité contrôlé par `doctor` ; sur Plesk, file d'attente et lancement des mises à jour demandées depuis l'administration |
 
@@ -348,6 +407,7 @@ Commandes de diagnostic, en ajoutant `artisan` sous Windows :
 | `artisan techindex:update-check` | Recherche une nouvelle version publiée (signature vérifiée) |
 | `artisan techindex:keys-info` | Empreintes des clés (sans les révéler) |
 | `artisan techindex:secrets-check` | Vérifie que chaque secret est déchiffrable |
+| `artisan techindex:integrations-sync --provider=pax8` | Lance tout de suite la synchronisation d'une intégration |
 | `artisan queue:failed` | Tâches en échec (imports, e-mails) |
 
 ## 10. Mises à jour de l'application

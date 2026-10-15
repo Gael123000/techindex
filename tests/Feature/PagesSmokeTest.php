@@ -111,6 +111,9 @@ class PagesSmokeTest extends TestCase
             '/admin/document-categories' => 'Admin/DocumentCategories/Index',
             '/admin/isps' => 'Admin/Isps/Index',
             '/admin/tags' => 'Admin/Tags/Index',
+            '/admin/integrations' => 'Admin/Integrations/Index',
+            '/admin/integrations/microsoft365' => 'Admin/Integrations/Show',
+            '/admin/integrations/pax8' => 'Admin/Integrations/Show',
             '/admin/updates' => 'Admin/Updates/Index',
         ];
     }

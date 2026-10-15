@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Enums\AccessType;
+use App\Enums\PasskeyType;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Client;
@@ -76,7 +77,56 @@ class PasskeyTest extends TestCase
             ->component('Profile/Show')
             ->has('passkeys', 1)
             ->where('passkeys.0.name', 'PC du bureau')
+            ->where('passkeys.0.type', 'security_key')
+            ->where('passkeys.0.detail', 'PC du bureau')
             ->missing('passkeys.0.credential'));
+    }
+
+    public function test_the_type_of_a_passkey_is_chosen_from_a_list(): void
+    {
+        $user = User::factory()->create();
+
+        // Sans précision, la clé prend le nom de son type.
+        $this->registerPasskey($user, null, PasskeyType::WindowsHello);
+        $passkey = Passkey::query()->sole();
+        $this->assertSame(PasskeyType::WindowsHello, $passkey->type);
+        $this->assertSame('Windows Hello', $passkey->name);
+
+        $this->actingAs($user)->get('/profile')->assertInertia(fn ($page) => $page
+            ->where('passkeys.0.type_label', 'Windows Hello')
+            ->where('passkeys.0.detail', null)
+            ->has('passkeyTypes', count(PasskeyType::cases()))
+            ->where('passkeyTypes.0', ['value' => 'windows_hello', 'label' => 'Windows Hello']));
+
+        // Un type hors de la liste, ou « Autre » sans précision, est refusé.
+        $authenticator = new FakeAuthenticator;
+        $options = $this->withRecentConfirmation()->getJson(route('profile.passkeys.options'))->json('options');
+        $this->postJson(route('profile.passkeys.store'), ['type' => 'inconnu', 'credential' => $authenticator->create($options)])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('type');
+        $this->postJson(route('profile.passkeys.store'), ['type' => 'other', 'name' => '', 'credential' => $authenticator->create($options)])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('name');
+        $this->assertSame(1, Passkey::query()->count());
+    }
+
+    public function test_the_owner_can_change_the_type_and_detail_of_a_passkey(): void
+    {
+        $user = User::factory()->create();
+        $this->registerPasskey($user, 'Clé de secours');
+        $passkey = Passkey::query()->sole();
+
+        $this->actingAs($user)->put(route('profile.passkeys.update', $passkey), ['type' => 'apple', 'name' => 'iPhone pro'])->assertSessionHasNoErrors();
+        $this->assertSame(PasskeyType::Apple, $passkey->fresh()->type);
+        $this->assertSame('iPhone pro', $passkey->fresh()->name);
+
+        $this->put(route('profile.passkeys.update', $passkey), ['type' => 'android', 'name' => null])->assertSessionHasNoErrors();
+        $this->assertSame('Android', $passkey->fresh()->name);
+        $this->assertNull($passkey->fresh()->detail());
+
+        $this->put(route('profile.passkeys.update', $passkey), ['type' => 'other'])->assertSessionHasErrors('name');
+        $this->put(route('profile.passkeys.update', $passkey), ['type' => 'inconnu', 'name' => 'X'])->assertSessionHasErrors('type');
+        $this->assertSame(PasskeyType::Android, $passkey->fresh()->type);
     }
 
     public function test_a_forged_or_replayed_registration_is_refused(): void
@@ -86,11 +136,11 @@ class PasskeyTest extends TestCase
 
         $options = $this->actingAs($user)->withRecentConfirmation()->getJson(route('profile.passkeys.options'))->json('options');
         $response = $authenticator->create($options);
-        $this->postJson(route('profile.passkeys.store'), ['name' => 'Piège', 'credential' => $response])->assertStatus(422);
+        $this->postJson(route('profile.passkeys.store'), ['type' => 'security_key', 'name' => 'Piège', 'credential' => $response])->assertStatus(422);
 
         // Le défi est consommé : la même réponse ne peut pas être rejouée.
         $authenticator->origin = 'http://localhost';
-        $this->postJson(route('profile.passkeys.store'), ['name' => 'Piège', 'credential' => $authenticator->create($options)])
+        $this->postJson(route('profile.passkeys.store'), ['type' => 'security_key', 'name' => 'Piège', 'credential' => $authenticator->create($options)])
             ->assertStatus(422)
             ->assertJsonValidationErrors('credential');
 
@@ -194,7 +244,7 @@ class PasskeyTest extends TestCase
         $this->actingAs($with)->get('/dashboard')->assertOk();
     }
 
-    public function test_a_passkey_can_confirm_identity_before_revealing_a_secret(): void
+    public function test_an_identity_confirmation_does_not_unlock_secrets(): void
     {
         $client = Client::factory()->create();
         $user = $this->userFor($client, UserRole::Technician);
@@ -207,11 +257,15 @@ class PasskeyTest extends TestCase
         $credential = Credential::query()->sole();
 
         $reveal = fn () => $this->postJson(route('clients.credentials.reveal', [$client, $credential]), ['purpose' => 'reveal']);
-        $reveal()->assertStatus(423);
+        $reveal()->assertStatus(423)->assertJsonPath('vault_locked', true);
 
+        // La confirmation d'identité (actions du compte) n'ouvre pas les mots de passe.
         $options = $this->getJson(route('security.passkey-confirmation.options'))->assertOk()->json('options');
         $this->postJson(route('security.passkey-confirmation.store'), ['credential' => $authenticator->get($options)])->assertOk();
+        $reveal()->assertStatus(423)->assertJsonMissingPath('secret');
 
+        // Seul le déverrouillage par clé d'accès les ouvre.
+        $this->unlockVault($user, $authenticator);
         $reveal()->assertOk()->assertJsonPath('secret', 'Valeur-Secrete-42');
     }
 
@@ -222,7 +276,7 @@ class PasskeyTest extends TestCase
         $passkey = Passkey::query()->sole();
         $intruder = User::factory()->create();
 
-        $this->actingAs($intruder)->withRecentConfirmation()->put(route('profile.passkeys.update', $passkey), ['name' => 'Volée'])->assertNotFound();
+        $this->actingAs($intruder)->withRecentConfirmation()->put(route('profile.passkeys.update', $passkey), ['type' => 'other', 'name' => 'Volée'])->assertNotFound();
         $this->delete(route('profile.passkeys.destroy', $passkey))->assertNotFound();
 
         $this->assertSame('Clé de test', $passkey->fresh()->name);

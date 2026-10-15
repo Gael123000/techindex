@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Enums\PasskeyType;
 use App\Models\User;
 use Tests\Support\FakeAuthenticator;
 
@@ -22,7 +23,7 @@ trait InteractsWithPasskeys
     /**
      * Enregistre une clé d'accès pour l'utilisateur en passant par les routes du profil.
      */
-    protected function registerPasskey(User $user, string $name = 'Clé de test'): FakeAuthenticator
+    protected function registerPasskey(User $user, ?string $name = 'Clé de test', PasskeyType $type = PasskeyType::SecurityKey): FakeAuthenticator
     {
         $authenticator = new FakeAuthenticator;
 
@@ -32,6 +33,7 @@ trait InteractsWithPasskeys
             ->json('options');
 
         $this->postJson(route('profile.passkeys.store'), [
+            'type' => $type->value,
             'name' => $name,
             'credential' => $authenticator->create($options),
         ])->assertOk();
@@ -40,7 +42,7 @@ trait InteractsWithPasskeys
     }
 
     /**
-     * Déverrouille le gestionnaire de mots de passe avec la clé indiquée.
+     * Déverrouille les mots de passe (gestionnaire et fiches) avec la clé indiquée.
      */
     protected function unlockVault(User $user, FakeAuthenticator $authenticator): void
     {

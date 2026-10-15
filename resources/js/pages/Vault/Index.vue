@@ -21,7 +21,7 @@ import {
     Trash2,
     Globe,
 } from '@lucide/vue';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 import Badge from '@/components/Badge.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
@@ -34,9 +34,9 @@ import PageHeader from '@/components/PageHeader.vue';
 import Pagination from '@/components/Pagination.vue';
 import SecretValue from '@/components/SecretValue.vue';
 import { useFilters } from '@/composables/useFilters';
+import { useVaultSession } from '@/composables/useVaultSession';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
-import { HttpError, requestJson } from '@/lib/http';
 import type { Breadcrumb, ClientFolder, CredentialRow, FolderNode, Option, Paginated, Ref } from '@/types';
 
 defineOptions({ layout: AppLayout });
@@ -94,46 +94,14 @@ const props = defineProps<{
     highlight?: number | null;
     options?: { types: Option[]; equipment: Option<number>[]; services: Option<number>[]; folders: Option<number>[] };
     can?: { create: boolean; manage_folders: boolean; write_secrets: boolean; reveal: boolean };
-    lock: { expires_in: number; idle_timeout: number };
 }>();
 
 /* -------------------------------------------------------------------------
- * Verrouillage automatique : après inactivité, et à l'échéance fixée par le
- * serveur. Une activité sur la page prolonge la session du coffre.
+ * Verrouillage automatique 5 minutes après l'ouverture, même en cas
+ * d'activité (échéance fixée par le serveur, commune aux fiches).
  * ---------------------------------------------------------------------- */
-const now = ref(Date.now());
-const expiresAt = ref(Date.now() + props.lock.expires_in * 1000);
-let lastActivity = Date.now();
-let lastRefresh = 0;
-let timer: ReturnType<typeof setInterval> | undefined;
+const { remaining, remainingLabel } = useVaultSession();
 let locking = false;
-
-const remaining = computed(() => Math.max(0, Math.ceil((expiresAt.value - now.value) / 1000)));
-const remainingLabel = computed(() => `${Math.floor(remaining.value / 60)}:${String(remaining.value % 60).padStart(2, '0')}`);
-
-watch(
-    () => props.lock,
-    (lock) => {
-        expiresAt.value = Date.now() + lock.expires_in * 1000;
-    },
-);
-
-function markActivity(): void {
-    lastActivity = Date.now();
-}
-
-async function refreshLock(): Promise<void> {
-    lastRefresh = Date.now();
-
-    try {
-        const status = await requestJson<{ expires_in: number }>(route('vault.status'));
-        expiresAt.value = Date.now() + status.expires_in * 1000;
-    } catch (exception) {
-        if (exception instanceof HttpError && exception.status === 423) {
-            router.reload();
-        }
-    }
-}
 
 function lockNow(): void {
     if (locking) {
@@ -141,38 +109,19 @@ function lockNow(): void {
     }
 
     locking = true;
-    clearInterval(timer);
     router.post(route('vault.lock'));
 }
 
-function tick(): void {
-    now.value = Date.now();
-
-    if (remaining.value <= 0 || now.value - lastActivity >= props.lock.idle_timeout * 1000) {
+watch(remaining, (seconds, previous) => {
+    if (seconds <= 0 && previous > 0) {
         lockNow();
-
-        return;
-    }
-
-    if (remaining.value < 60 && now.value - lastActivity < 60_000 && now.value - lastRefresh > 20_000) {
-        void refreshLock();
-    }
-}
-
-const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'mousemove', 'wheel', 'touchstart'] as const;
-
-onMounted(() => {
-    timer = setInterval(tick, 1000);
-    ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, markActivity, { passive: true }));
-
-    if (props.highlight) {
-        flash(props.highlight);
     }
 });
 
-onBeforeUnmount(() => {
-    clearInterval(timer);
-    ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, markActivity));
+onMounted(() => {
+    if (props.highlight) {
+        flash(props.highlight);
+    }
 });
 
 /* -------------------------------------------------------------------------

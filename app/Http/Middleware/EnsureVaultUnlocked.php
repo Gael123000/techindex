@@ -9,13 +9,12 @@ use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Le gestionnaire de mots de passe n'est accessible qu'une fois déverrouillé
- * par une clé d'accès. Sinon :
+ * Les mots de passe (gestionnaire, et révélation depuis les fiches) ne sont
+ * accessibles qu'une fois déverrouillés par une clé d'accès, pour une durée
+ * fixe (VaultLock::DURATION) que l'activité ne prolonge pas. Sinon :
  * - une page affiche l'écran de déverrouillage, à la même adresse ;
  * - un appel JSON reçoit 423, et l'interface propose le déverrouillage ;
  * - une modification est refusée.
- *
- * Chaque requête autorisée prolonge la période d'inactivité.
  */
 class EnsureVaultUnlocked
 {
@@ -27,8 +26,6 @@ class EnsureVaultUnlocked
             return $this->lockedResponse($request);
         }
 
-        VaultLock::touch($request);
-
         $response = $next($request);
 
         // Les pages du gestionnaire ne doivent pas rester dans le cache du navigateur.
@@ -39,23 +36,23 @@ class EnsureVaultUnlocked
 
     private function lockedResponse(Request $request): Response
     {
-        $message = 'Le gestionnaire de mots de passe est verrouillé.';
+        $message = 'Les mots de passe sont verrouillés.';
 
         if ($request->expectsJson() && ! $request->header('X-Inertia')) {
             return response()
-                ->json(['message' => $message, 'vault_locked' => true], 423)
+                ->json(['message' => $message.' Déverrouillez-les avec votre clé d\'accès.', 'vault_locked' => true], 423)
                 ->header('Cache-Control', 'no-store, private');
         }
 
         if (! $request->isMethod('GET')) {
-            return redirect()->route('vault.index')->with('error', $message.' Déverrouillez-le pour continuer.');
+            return redirect()->route('vault.index')->with('error', $message.' Déverrouillez-les pour continuer.');
         }
 
         $user = $request->user();
 
         return Inertia::render('Vault/Locked', [
             'hasPasskeys' => $user->hasPasskeysEnabled(),
-            'idleMinutes' => (int) ceil(VaultLock::idleTimeout() / 60),
+            'lockMinutes' => VaultLock::minutes(),
         ])->toResponse($request)->header('Cache-Control', 'no-store, private');
     }
 }

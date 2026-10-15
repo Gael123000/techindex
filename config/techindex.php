@@ -89,10 +89,6 @@ return [
 
         'cipher' => 'aes-256-gcm',
 
-        // Délai (secondes) pendant lequel une confirmation du mot de passe
-        // autorise la révélation d'un secret.
-        'reauth_timeout' => (int) env('SECRETS_REAUTH_TIMEOUT', 600),
-
         // Nombre maximal de révélations / copies par minute et par utilisateur.
         'reveal_per_minute' => (int) env('SECRETS_REVEAL_PER_MINUTE', 20),
     ],
@@ -104,14 +100,13 @@ return [
     |
     | Le gestionnaire ne s'ouvre qu'après vérification d'une clé d'accès
     | (WebAuthn, avec vérification de l'utilisateur : biométrie ou code PIN).
-    | Il se reverrouille après une période d'inactivité, et dans tous les cas
-    | au bout d'une durée maximale.
+    | Le même verrou protège l'affichage des secrets sur les fiches. Il se
+    | reverrouille 5 minutes après son ouverture, même en cas d'activité
+    | (durée fixe : App\Services\Vault\VaultLock::DURATION).
     |
     */
 
     'vault' => [
-        'idle_timeout' => (int) env('VAULT_IDLE_TIMEOUT', 300),
-        'max_unlock' => (int) env('VAULT_MAX_UNLOCK', 1800),
         // Tentatives de déverrouillage par minute et par utilisateur.
         'unlock_per_minute' => 10,
     ],

@@ -38,6 +38,11 @@ Schedule::command('auth:clear-resets')->dailyAt('02:45');
 // Tâches en échec de plus de 30 jours.
 Schedule::command('queue:prune-failed', ['--hours' => 720])->dailyAt('03:00');
 
+// Intégrations : synchronisations automatiques arrivées à échéance ; liste des
+// noms de licences Microsoft rafraîchie chaque semaine.
+Schedule::command('techindex:integrations-sync')->hourlyAt(17)->withoutOverlapping();
+Schedule::command('techindex:integrations-sync', ['--refresh-catalogs'])->weeklyOn(1, '04:10')->withoutOverlapping();
+
 // Contrôle quotidien : tous les secrets restent déchiffrables avec les clés configurées.
 Schedule::command('techindex:secrets-check')->dailyAt('03:15')->withoutOverlapping();
 

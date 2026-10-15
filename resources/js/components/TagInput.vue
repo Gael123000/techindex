@@ -40,7 +40,7 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-    <div class="rounded-md border border-slate-300 bg-white px-2 py-1.5 focus-within:border-turquoise-600 focus-within:ring-1 focus-within:ring-turquoise-600">
+    <div class="rounded-field border border-slate-300 bg-white px-2 py-1.5 focus-within:border-turquoise-600 focus-within:ring-1 focus-within:ring-turquoise-600">
         <ul class="flex flex-wrap items-center gap-1.5">
             <li v-for="name in model" :key="name" class="inline-flex items-center gap-1 rounded-full bg-navy-50 py-0.5 pr-1 pl-2 text-xs font-medium text-navy-800">
                 {{ name }}

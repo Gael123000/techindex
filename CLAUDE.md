@@ -6,9 +6,13 @@ MariaDB 11.8, interface et documentation en français. Architecture et choix :
 
 ## Règles de sécurité non négociables
 
-- Les secrets clients ne sont lus ou écrits **que** par `App\Secrets\CredentialSecrets`.
+- Les secrets clients ne sont lus ou écrits **que** par `App\Secrets\CredentialSecrets`,
+  les identifiants d'API des intégrations **que** par `App\Secrets\IntegrationSecrets`.
   Jamais de valeur de secret dans une page Inertia, un journal, l'audit, la
   recherche, un export, une notification ou un message d'erreur.
+- Intégrations : un connecteur (`app/Services/Integrations/Providers`) n'appelle
+  que les domaines de son fournisseur (`ServiceUrl` pour une adresse
+  configurable) et ne remonte que des `IntegrationException` sans corps de réponse.
 - Tout accès à une donnée client passe par une politique (`ClientPolicy`,
   `ClientResourcePolicy`...) ou par `scopeVisibleTo()` dans la requête SQL.
   Masquer un bouton n'est pas un contrôle. Client non attribué = 404.

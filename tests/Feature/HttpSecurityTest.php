@@ -44,7 +44,7 @@ class HttpSecurityTest extends TestCase
         $client = Client::factory()->create();
         $user = $this->userFor($client);
 
-        $this->actingAs($user)->withRecentConfirmation()
+        $this->actingAs($user)->withUnlockedVault($user)
             ->postJson("/clients/{$client->id}/credentials/999999/reveal", ['purpose' => 'reveal'])
             ->assertNotFound()
             ->assertJsonMissingPath('trace')

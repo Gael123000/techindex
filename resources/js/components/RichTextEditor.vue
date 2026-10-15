@@ -129,7 +129,7 @@ const tableActions = [
 </script>
 
 <template>
-    <div class="overflow-hidden rounded-md border bg-white" :class="invalid ? 'border-red-500' : 'border-slate-300 focus-within:border-turquoise-600'">
+    <div class="overflow-hidden rounded-field border bg-white" :class="invalid ? 'border-red-500' : 'border-slate-300 focus-within:border-turquoise-600'">
         <div role="toolbar" aria-label="Mise en forme" class="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
             <template v-for="(group, index) in buttons" :key="index">
                 <span v-if="index > 0" class="mx-1 h-5 w-px bg-slate-300" aria-hidden="true" />

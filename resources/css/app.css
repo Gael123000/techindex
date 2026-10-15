@@ -34,12 +34,20 @@
     --color-turquoise-700: #0f736b;
     --color-turquoise-800: #115c57;
     --color-turquoise-900: #124c48;
+
+    /* Arrondi des champs de saisie (classe utilitaire rounded-field). */
+    --radius-field: 12px;
 }
 
 @layer base {
     html,
     body {
         height: 100%;
+    }
+
+    /* Place de la barre de défilement toujours réservée : l'en-tête et les onglets ne bougent pas d'une page à l'autre. */
+    html {
+        scrollbar-gutter: stable;
     }
 
     :focus-visible {
@@ -50,6 +58,15 @@
     [type='checkbox'],
     [type='radio'] {
         color: var(--color-navy-800);
+    }
+}
+
+/* Défilement sans barre visible (barre d'onglets). */
+@utility scrollbar-none {
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
     }
 }
 
@@ -90,8 +107,13 @@
         @apply rounded-lg border border-slate-200 bg-white shadow-sm;
     }
 
+    /*
+     * Le plugin @tailwindcss/forms génère aussi une classe .form-input (couche
+     * utilities, border-radius: 0) qui l'emporte sur cette couche : l'arrondi
+     * est donc forcé.
+     */
     .form-input {
-        @apply block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-turquoise-600 focus:ring-turquoise-600;
+        @apply block w-full rounded-field! border-slate-300 text-sm shadow-sm focus:border-turquoise-600 focus:ring-turquoise-600;
     }
 
     .link {

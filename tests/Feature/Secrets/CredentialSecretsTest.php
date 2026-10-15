@@ -15,6 +15,7 @@ use App\Secrets\Exceptions\SecretVaultException;
 use App\Secrets\Keyring;
 use App\Secrets\LocalSecretVault;
 use App\Secrets\SealedSecret;
+use App\Services\Vault\VaultLock;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -79,27 +80,38 @@ class CredentialSecretsTest extends TestCase
         $this->assertArrayNotHasKey('secret_ciphertext', $credential->fresh()->toArray());
     }
 
-    public function test_reveal_requires_a_recent_password_confirmation(): void
+    public function test_reveal_requires_a_passkey_unlock_of_less_than_five_minutes(): void
     {
         $credential = $this->storeCredential();
+        $url = "/clients/{$this->client->id}/credentials/{$credential->id}/reveal";
 
-        $this->actingAs($this->technician)
-            ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
+        $this->actingAs($this->technician)->postJson($url, ['purpose' => 'reveal'])
+            ->assertStatus(423)
+            ->assertJsonPath('vault_locked', true)
+            ->assertJsonMissingPath('secret');
+
+        // Un mot de passe confirmé ne suffit pas.
+        $this->actingAs($this->technician)->withRecentConfirmation()->postJson($url, ['purpose' => 'reveal'])
             ->assertStatus(423)
             ->assertJsonMissingPath('secret');
 
-        // Confirmation trop ancienne.
-        $this->actingAs($this->technician)
-            ->withSession(['auth.password_confirmed_at' => now()->subSeconds(config('techindex.secrets.reauth_timeout') + 5)->getTimestamp()])
-            ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
-            ->assertStatus(423);
+        // Déverrouillage par un autre utilisateur dans la même session : refusé.
+        $other = $this->userFor($this->client, UserRole::Technician);
+        $this->actingAs($this->technician)->withUnlockedVault($other)->postJson($url, ['purpose' => 'reveal'])->assertStatus(423);
+
+        // Déverrouillage de plus de 5 minutes, même avec une activité entre-temps.
+        $this->actingAs($this->technician)->withUnlockedVault($this->technician)->postJson($url, ['purpose' => 'reveal'])->assertOk();
+        $this->travel(VaultLock::DURATION - 10)->seconds();
+        $this->postJson($url, ['purpose' => 'reveal'])->assertOk();
+        $this->travel(11)->seconds();
+        $this->postJson($url, ['purpose' => 'reveal'])->assertStatus(423)->assertJsonMissingPath('secret');
     }
 
     public function test_reveal_returns_the_secret_without_caching_and_is_audited_without_value(): void
     {
         $credential = $this->storeCredential();
 
-        $response = $this->actingAs($this->technician)->withRecentConfirmation()
+        $response = $this->actingAs($this->technician)->withUnlockedVault($this->technician)
             ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'copy'])
             ->assertOk()
             ->assertJson(['secret' => self::SECRET]);
@@ -120,7 +132,7 @@ class CredentialSecretsTest extends TestCase
         $this->actingAs($reader)->get("/clients/{$this->client->id}/credentials")->assertOk()
             ->assertInertia(fn ($page) => $page->where('credentials.data.0.reveal_url', null));
 
-        $this->actingAs($reader)->withRecentConfirmation()
+        $this->actingAs($reader)->withUnlockedVault($reader)
             ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
             ->assertForbidden()
             ->assertJsonMissingPath('secret');
@@ -132,11 +144,11 @@ class CredentialSecretsTest extends TestCase
         $otherClient = Client::factory()->create();
         $stranger = $this->userFor($otherClient, UserRole::Manager);
 
-        $this->actingAs($stranger)->withRecentConfirmation()
+        $this->actingAs($stranger)->withUnlockedVault($stranger)
             ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
             ->assertNotFound();
 
-        $this->actingAs($stranger)->withRecentConfirmation()
+        $this->actingAs($stranger)->withUnlockedVault($stranger)
             ->postJson("/clients/{$otherClient->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
             ->assertNotFound();
     }
@@ -191,11 +203,11 @@ class CredentialSecretsTest extends TestCase
         $limit = (int) config('techindex.secrets.reveal_per_minute');
 
         for ($i = 0; $i < $limit; $i++) {
-            $this->actingAs($this->technician)->withRecentConfirmation()
+            $this->actingAs($this->technician)->withUnlockedVault($this->technician)
                 ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])->assertOk();
         }
 
-        $this->actingAs($this->technician)->withRecentConfirmation()
+        $this->actingAs($this->technician)->withUnlockedVault($this->technician)
             ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])->assertStatus(429);
     }
 
@@ -234,7 +246,7 @@ class CredentialSecretsTest extends TestCase
         $this->app->forgetInstance(SecretVault::class);
         $this->app->forgetInstance(CredentialSecrets::class);
 
-        $this->actingAs($this->technician)->withRecentConfirmation()
+        $this->actingAs($this->technician)->withUnlockedVault($this->technician)
             ->postJson("/clients/{$this->client->id}/credentials/{$credential->id}/reveal", ['purpose' => 'reveal'])
             ->assertStatus(409)
             ->assertJsonMissingPath('secret');

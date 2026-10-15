@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { Building2, ClipboardList, FileText, Globe, Loader2, MapPin, Search, Server, Wifi } from '@lucide/vue';
+import { Building2, ClipboardList, FileText, Globe, Loader2, MapPin, Search, Server, Wifi, X } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
@@ -9,9 +9,10 @@ import { highlight } from '@/lib/highlight';
 import DynamicIcon from './DynamicIcon.vue';
 
 /**
- * Barre de recherche globale : résultats affichés pendant la frappe
- * (modèle « combobox » accessible au clavier), Entrée pour la recherche
- * complète.
+ * Barre de recherche globale, compacte dans l'en-tête (largeur fixe pour ne
+ * pas déplacer les onglets, simple icône sur petit écran) : résultats affichés pendant la
+ * frappe (modèle « combobox » accessible au clavier), Entrée pour la
+ * recherche complète.
  */
 interface SuggestionItem {
     id: number;
@@ -41,6 +42,8 @@ const error = ref<string | null>(null);
 const groups = ref<SuggestionGroup[]>([]);
 const searchedFor = ref('');
 const activeIndex = ref(-1);
+/* Petit écran : la recherche s'ouvre par-dessus l'en-tête. */
+const mobileOpen = ref(false);
 
 let timer: number | undefined;
 let sequence = 0;
@@ -174,6 +177,8 @@ function onKeydown(event: KeyboardEvent): void {
                 close();
             } else if (query.value !== '') {
                 query.value = '';
+            } else if (mobileOpen.value) {
+                mobileOpen.value = false;
             }
             break;
     }
@@ -200,14 +205,37 @@ function onShortcut(event: KeyboardEvent): void {
 
     if ((event.key === 'k' && (event.ctrlKey || event.metaKey)) || (event.key === '/' && !typing)) {
         event.preventDefault();
-        input.value?.focus();
-        input.value?.select();
+        void openSearch();
     }
 }
 
-onMounted(() => window.addEventListener('keydown', onShortcut));
+async function openSearch(): Promise<void> {
+    // Champ masqué sur petit écran : il s'affiche d'abord.
+    if (input.value?.offsetParent === null) {
+        mobileOpen.value = true;
+        await nextTick();
+    }
+
+    input.value?.focus();
+    input.value?.select();
+}
+
+// Passage en grand écran : le champ redevient visible dans l'en-tête.
+const wideScreen = window.matchMedia('(min-width: 768px)');
+
+function onScreenChange(event: MediaQueryListEvent): void {
+    if (event.matches) {
+        mobileOpen.value = false;
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', onShortcut);
+    wideScreen.addEventListener('change', onScreenChange);
+});
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onShortcut);
+    wideScreen.removeEventListener('change', onScreenChange);
     window.clearTimeout(timer);
 });
 
@@ -215,6 +243,7 @@ watch(
     () => page.url,
     () => {
         close();
+        mobileOpen.value = false;
 
         if (typeof page.props.query === 'string') {
             query.value = page.props.query;
@@ -224,17 +253,29 @@ watch(
 </script>
 
 <template>
-    <form role="search" class="relative max-w-xl flex-1" @submit.prevent="searchAll" @focusout="onFocusOut">
+    <button type="button" class="btn-ghost px-2 md:hidden" title="Rechercher (Ctrl K)" @click="openSearch">
+        <Search class="h-5 w-5" aria-hidden="true" />
+        <span class="sr-only">Rechercher</span>
+    </button>
+
+    <form
+        role="search"
+        class="md:relative md:block"
+        :class="mobileOpen ? 'fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-2 border-b border-slate-200 bg-white px-3 shadow-sm' : 'hidden'"
+        @submit.prevent="searchAll"
+        @focusout="onFocusOut"
+    >
         <label for="global-search" class="sr-only">Rechercher dans TechIndex</label>
-        <div class="relative">
+        <div class="relative min-w-0 flex-1">
             <Search class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <input
                 id="global-search"
                 ref="input"
                 v-model="query"
                 type="search"
-                class="form-input pr-16 pl-9"
-                placeholder="Client, équipement, IP, n° de série, FAI, document…"
+                class="form-input h-9 pr-9 pl-9 md:w-56 md:bg-slate-50 md:focus:bg-white xl:w-64"
+                placeholder="Rechercher…"
+                title="Client, équipement, IP, n° de série, FAI, document…"
                 autocomplete="off"
                 spellcheck="false"
                 role="combobox"
@@ -246,8 +287,12 @@ watch(
                 @focus="onFocus"
             />
             <Loader2 v-if="loading" class="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" aria-hidden="true" />
-            <kbd v-else class="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border border-slate-200 px-1.5 text-[10px] font-medium text-slate-400 sm:block">Ctrl K</kbd>
+            <kbd v-else-if="query === ''" class="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-slate-200 bg-white px-1.5 text-[10px] font-medium text-slate-400 md:block">Ctrl K</kbd>
         </div>
+        <button v-if="mobileOpen" type="button" class="btn-ghost shrink-0 px-2 md:hidden" @click="mobileOpen = false">
+            <X class="h-5 w-5" aria-hidden="true" />
+            <span class="sr-only">Fermer la recherche</span>
+        </button>
 
         <p class="sr-only" role="status" aria-live="polite">
             <template v-if="open && !loading && searchedFor === term">{{ total === 0 ? 'Aucun résultat' : `${total} résultat(s) proposés` }}</template>
@@ -255,7 +300,7 @@ watch(
 
         <div
             v-show="open"
-            class="absolute inset-x-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
+            class="absolute top-full z-40 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl max-md:inset-x-2 md:right-0 md:w-[min(32rem,calc(100vw-2rem))]"
         >
             <div id="global-search-listbox" role="listbox" aria-label="Résultats de la recherche" class="max-h-[min(70vh,32rem)] overflow-y-auto py-1">
                 <p v-if="error" class="px-4 py-3 text-sm text-red-700">{{ error }}</p>

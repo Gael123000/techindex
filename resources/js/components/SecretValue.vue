@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
 import { Copy, Eye, EyeOff } from '@lucide/vue';
-import { onBeforeUnmount, ref } from 'vue';
-import { requestPasswordConfirmation } from '@/composables/usePasswordConfirmation';
+import { onBeforeUnmount, ref, watch } from 'vue';
+import { requestVaultUnlock, useVaultSession } from '@/composables/useVaultSession';
 import { HttpError, requestJson } from '@/lib/http';
 
 /**
  * Secret masqué par défaut. La valeur n'est demandée au serveur qu'au clic
- * (révélation ou copie) ; le serveur exige une confirmation récente de
- * l'identité (ou, dans le gestionnaire, un coffre déverrouillé par clé
- * d'accès) et journalise la demande. La valeur affichée est effacée de la
- * mémoire de la page après 30 secondes.
+ * (révélation ou copie) ; le serveur exige que les mots de passe aient été
+ * déverrouillés par clé d'accès depuis moins de 5 minutes (sur une fiche
+ * comme dans le gestionnaire) et journalise la demande. La valeur affichée
+ * est effacée de la mémoire de la page après 30 secondes, ou dès le
+ * reverrouillage.
  */
 const props = defineProps<{ revealUrl: string | null; label: string }>();
 
@@ -19,6 +19,7 @@ const remaining = ref(0);
 const busy = ref(false);
 const message = ref<string | null>(null);
 const error = ref<string | null>(null);
+const { remaining: unlockedFor } = useVaultSession();
 let timer: ReturnType<typeof setInterval> | undefined;
 
 function hide(): void {
@@ -38,17 +39,11 @@ async function fetchSecret(purpose: 'reveal' | 'copy'): Promise<{ secret: string
     try {
         return await requestJson<{ secret: string; expires_in: number }>(props.revealUrl, { method: 'POST', body: { purpose } });
     } catch (exception) {
-        if (exception instanceof HttpError && exception.status === 423) {
+        // Mots de passe verrouillés : déverrouillage par clé d'accès, puis nouvelle demande.
+        if (exception instanceof HttpError && exception.status === 423 && exception.payload.vault_locked) {
             busy.value = false;
 
-            // Gestionnaire de mots de passe reverrouillé : retour à l'écran de déverrouillage.
-            if (exception.payload.vault_locked) {
-                router.reload();
-
-                return null;
-            }
-
-            return (await requestPasswordConfirmation()) ? fetchSecret(purpose) : null;
+            return (await requestVaultUnlock()) ? fetchSecret(purpose) : null;
         }
 
         error.value =
@@ -111,6 +106,13 @@ async function copy(): Promise<void> {
         message.value = null;
     }, 4000);
 }
+
+// Reverrouillage (fin des 5 minutes ou verrouillage manuel) : le secret affiché disparaît.
+watch(unlockedFor, (seconds) => {
+    if (seconds <= 0) {
+        hide();
+    }
+});
 
 onBeforeUnmount(hide);
 </script>

@@ -19,6 +19,7 @@ use App\Models\EquipmentLink;
 use App\Models\EquipmentType;
 use App\Models\FileFolder;
 use App\Models\Import;
+use App\Models\Integration;
 use App\Models\InternetLink;
 use App\Models\Isp;
 use App\Models\License;
@@ -136,6 +137,7 @@ class AppServiceProvider extends ServiceProvider
             'passkey' => Passkey::class,
             'tag' => Tag::class,
             'import' => Import::class,
+            'integration' => Integration::class,
             'audit_log' => AuditLog::class,
         ]);
 
@@ -214,6 +216,10 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('update-checks', fn (Request $request): Limit => Limit::perMinute(6)
             ->by('updates|'.$request->user()?->getAuthIdentifier()));
+
+        // Intégrations : tests de connexion, ajouts de comptes et synchronisations manuelles.
+        RateLimiter::for('integrations', fn (Request $request): Limit => Limit::perMinute(20)
+            ->by('integrations|'.$request->user()?->getAuthIdentifier()));
     }
 
     /**

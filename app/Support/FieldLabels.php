@@ -11,6 +11,8 @@ final class FieldLabels
 {
     private const LABELS = [
         'account_manager_id' => 'Responsable interne',
+        'parent_id' => 'Entreprise mère',
+        'group_role' => 'Rôle dans le groupe',
         'access_instructions' => 'Consignes d\'accès',
         'is_technical' => 'Contact technique',
         'is_primary' => 'Contact principal',

@@ -16,8 +16,9 @@ use Tests\Support\FakeAuthenticator;
 use Tests\TestCase;
 
 /**
- * Gestionnaire de mots de passe : verrou par clé d'accès, même source de
- * données que les fiches, rangement en dossiers limité au client.
+ * Gestionnaire de mots de passe : verrou par clé d'accès commun aux fiches,
+ * ouvert 5 minutes sans prolongation, même source de données que les fiches,
+ * rangement en dossiers limité au client.
  */
 class VaultTest extends TestCase
 {
@@ -71,7 +72,7 @@ class VaultTest extends TestCase
         $this->actingAs($this->technician)->get('/vault')->assertOk()
             ->assertInertia(fn ($page) => $page->component('Vault/Locked')->where('hasPasskeys', false));
         $this->get("/vault/clients/{$this->client->id}")->assertInertia(fn ($page) => $page->component('Vault/Locked'));
-        $this->postJson(route('vault.clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])
+        $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])
             ->assertStatus(423)
             ->assertJsonPath('vault_locked', true);
         $this->getJson(route('vault.unlock.options'))->assertStatus(422);
@@ -136,40 +137,65 @@ class VaultTest extends TestCase
         $this->assertSame($folder->id, $ssh->fresh()->folder_id);
     }
 
-    public function test_the_vault_relocks_after_inactivity_and_after_its_maximum_duration(): void
+    public function test_the_vault_relocks_five_minutes_after_unlocking_even_when_active(): void
     {
+        $this->freezeTime();
+        $credential = $this->credential();
         $this->unlocked();
-        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Index'));
+        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Index')->where('vault.expires_in', VaultLock::DURATION));
 
-        $this->travel(VaultLock::idleTimeout() + 1)->seconds();
-        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Locked'));
-
-        // Même actif, le coffre se reverrouille au bout de la durée maximale.
-        $this->unlockVault($this->technician, $this->registerPasskey($this->technician, 'Seconde clé'));
-        $this->flushSessionKeepingVault();
-
-        for ($elapsed = 0; $elapsed <= VaultLock::maxDuration(); $elapsed += VaultLock::idleTimeout() - 10) {
-            $this->travel(VaultLock::idleTimeout() - 10)->seconds();
-            $this->getJson(route('vault.status'));
+        // Une activité régulière ne prolonge pas l'ouverture.
+        for ($minute = 1; $minute <= 4; $minute++) {
+            $this->travel(60)->seconds();
+            $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Index')->where('vault.expires_in', VaultLock::DURATION - 60 * $minute));
+            $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])->assertOk();
         }
 
-        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Locked'));
+        $this->travel(VaultLock::DURATION - 240)->seconds();
+        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Locked')->where('lockMinutes', 5)->where('vault.expires_in', 0));
+        $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])
+            ->assertStatus(423)
+            ->assertJsonPath('vault_locked', true)
+            ->assertJsonMissingPath('secret');
     }
 
-    /**
-     * Retire la confirmation récente de la session sans toucher au coffre.
-     */
-    private function flushSessionKeepingVault(): void
+    public function test_secrets_on_an_equipment_page_require_the_passkey_unlock_shared_with_the_vault(): void
     {
-        $this->app['session']->forget('auth.password_confirmed_at');
+        $equipment = Equipment::factory()->for($this->client)->create();
+        $credential = $this->credential(['equipment_id' => $equipment->id]);
+        $authenticator = $this->registerPasskey($this->technician);
+        $reveal = fn () => $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'copy']);
+
+        // Mot de passe TechIndex confirmé (registerPasskey) : la fiche reste verrouillée.
+        $this->get("/clients/{$this->client->id}/equipment/{$equipment->id}")->assertInertia(fn ($page) => $page
+            ->where('vault.expires_in', 0)
+            ->where('credentials.0.reveal_url', route('clients.credentials.reveal', [$this->client, $credential])));
+        $reveal()->assertStatus(423)->assertJsonPath('vault_locked', true)->assertJsonMissingPath('secret');
+
+        // Déverrouillé depuis la fiche : le gestionnaire est ouvert aussi, pour la même durée.
+        $this->unlockVault($this->technician, $authenticator);
+        $reveal()->assertOk()->assertJsonPath('secret', self::SECRET);
+        $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Index'));
+        $this->assertTrue(AuditLog::query()->where('event', 'credential.secret_copied')->where('subject_id', $credential->id)->exists());
+
+        // 5 minutes plus tard, la fiche redemande la clé d'accès.
+        $this->travel(VaultLock::DURATION)->seconds();
+        $this->get("/clients/{$this->client->id}/equipment/{$equipment->id}")->assertInertia(fn ($page) => $page->where('vault.expires_in', 0));
+        $reveal()->assertStatus(423)->assertJsonPath('vault_locked', true);
     }
 
     public function test_locking_clears_the_unlocked_state(): void
     {
+        $credential = $this->credential();
         $this->unlocked();
 
         $this->post(route('vault.lock'))->assertRedirect(route('vault.index'));
         $this->get('/vault')->assertInertia(fn ($page) => $page->component('Vault/Locked'));
+
+        // Verrouillage depuis une fiche (appel JSON) : les secrets sont refusés aussitôt.
+        $this->unlocked();
+        $this->postJson(route('vault.lock'))->assertOk()->assertJsonPath('locked', true);
+        $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])->assertStatus(423);
     }
 
     public function test_reveal_from_the_vault_requires_the_secret_permission_and_is_audited(): void
@@ -178,11 +204,11 @@ class VaultTest extends TestCase
         $reader = $this->userFor($this->client, UserRole::Reader);
         $this->unlocked($reader);
 
-        $this->actingAs($reader)->postJson(route('vault.clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])->assertForbidden();
+        $this->actingAs($reader)->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'reveal'])->assertForbidden();
 
         $this->flushSession();
         $this->unlocked();
-        $response = $this->postJson(route('vault.clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'copy'])
+        $response = $this->postJson(route('clients.credentials.reveal', [$this->client, $credential]), ['purpose' => 'copy'])
             ->assertOk()
             ->assertJsonPath('secret', self::SECRET);
         $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
@@ -200,7 +226,7 @@ class VaultTest extends TestCase
 
         $this->unlocked();
         $this->get("/vault/clients/{$other->id}")->assertNotFound();
-        $this->postJson(route('vault.clients.credentials.reveal', [$this->client, $foreign]), ['purpose' => 'reveal'])->assertNotFound();
+        $this->postJson(route('clients.credentials.reveal', [$this->client, $foreign]), ['purpose' => 'reveal'])->assertNotFound();
         $this->get('/vault')->assertInertia(fn ($page) => $page->has('clients', 1)->where('clients.0.id', $this->client->id));
     }
 

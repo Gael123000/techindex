@@ -1,7 +1,8 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ inverted?: boolean; showTagline?: boolean }>(), {
+withDefaults(defineProps<{ inverted?: boolean; showTagline?: boolean; compact?: boolean }>(), {
     inverted: false,
     showTagline: false,
+    compact: false,
 });
 </script>
 
@@ -12,7 +13,7 @@ withDefaults(defineProps<{ inverted?: boolean; showTagline?: boolean }>(), {
             <path d="M8 10h16M16 10v13" :stroke="inverted ? '#10203f' : '#ffffff'" stroke-width="3" stroke-linecap="round" />
             <circle cx="23.5" cy="22.5" r="3" fill="#14b3a4" />
         </svg>
-        <div class="leading-tight">
+        <div v-if="!compact" class="leading-tight">
             <span class="block text-base font-semibold tracking-tight" :class="inverted ? 'text-white' : 'text-navy-900'">
                 Tech<span class="text-turquoise-500">Index</span>
             </span>

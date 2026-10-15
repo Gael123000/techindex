@@ -75,7 +75,7 @@ const initials = computed(() =>
 </script>
 
 <template>
-    <Head :title="`${title} – ${context.name}`" />
+    <Head :title="`${context.name} – ${title}`" />
 
     <Breadcrumbs :items="trail" class="mb-3" />
 
@@ -89,7 +89,14 @@ const initials = computed(() =>
                 <p class="truncate text-base font-semibold text-navy-900">
                     <Link :href="route('clients.show', context.id)" class="hover:underline">{{ context.name }}</Link>
                 </p>
-                <p class="text-xs text-slate-500">{{ context.reference }}</p>
+                <p class="truncate text-xs text-slate-500">
+                    {{ context.reference }}
+                    <template v-if="context.group.parent">
+                        · {{ context.group.role_label ?? 'Rattaché' }} de
+                        <Link :href="route('clients.show', context.group.parent.id)" class="font-medium text-slate-600 hover:text-navy-900 hover:underline">{{ context.group.parent.name }}</Link>
+                    </template>
+                    <template v-else-if="context.group.role_label"> · {{ context.group.role_label }}</template>
+                </p>
             </div>
             <Badge v-if="context.status === 'archived'" color="amber"><Archive class="h-3 w-3" aria-hidden="true" /> Client archivé : lecture seule</Badge>
         </div>

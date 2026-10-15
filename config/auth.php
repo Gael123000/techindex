@@ -115,7 +115,7 @@ return [
     */
 
     // Réduit à 15 minutes pour les opérations sensibles du profil (2FA).
-    // La révélation des secrets utilise un délai propre (SECRETS_REAUTH_TIMEOUT).
+    // La révélation des secrets exige, elle, un déverrouillage par clé d'accès (VaultLock).
     'password_timeout' => (int) env('AUTH_PASSWORD_TIMEOUT', 900),
 
 ];

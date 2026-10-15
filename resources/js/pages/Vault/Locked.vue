@@ -4,16 +4,18 @@ import { Fingerprint, KeyRound, LockKeyhole, ShieldCheck } from '@lucide/vue';
 import { onMounted, ref } from 'vue';
 import { route } from 'ziggy-js';
 import PageHeader from '@/components/PageHeader.vue';
+import { unlockVault } from '@/composables/useVaultSession';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { passkeysSupported, verifyPasskey } from '@/lib/webauthn';
+import { passkeysSupported } from '@/lib/webauthn';
 
 defineOptions({ layout: AppLayout });
 
 /**
- * Écran affiché tant que le gestionnaire de mots de passe est verrouillé.
- * Seule une clé d'accès (biométrie ou code PIN de l'appareil) le déverrouille.
+ * Écran affiché tant que les mots de passe sont verrouillés. Seule une clé
+ * d'accès (biométrie ou code PIN de l'appareil) les déverrouille, pour une
+ * durée fixe commune au gestionnaire et aux fiches.
  */
-defineProps<{ hasPasskeys: boolean; idleMinutes: number }>();
+defineProps<{ hasPasskeys: boolean; lockMinutes: number }>();
 
 const busy = ref(false);
 const error = ref<string | null>(null);
@@ -28,7 +30,7 @@ async function unlock(): Promise<void> {
     error.value = null;
 
     try {
-        await verifyPasskey(route('vault.unlock.options'), route('vault.unlock'));
+        await unlockVault();
         router.reload();
     } catch (exception) {
         error.value = exception instanceof Error ? exception.message : 'Le déverrouillage a échoué.';
@@ -72,7 +74,8 @@ async function unlock(): Promise<void> {
 
         <p class="mt-8 flex items-center justify-center gap-1.5 text-xs text-slate-500">
             <ShieldCheck class="h-3.5 w-3.5" aria-hidden="true" />
-            Reverrouillage automatique après {{ idleMinutes }} min d'inactivité. Chaque ouverture est enregistrée dans le journal d'audit.
+            Reverrouillage automatique {{ lockMinutes }} min après l'ouverture, même en cas d'activité. Chaque ouverture est enregistrée dans le journal
+            d'audit.
         </p>
     </section>
 </template>

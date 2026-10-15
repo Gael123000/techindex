@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\Admin\DocumentCategoryController;
 use App\Http\Controllers\Admin\EquipmentTypeController;
+use App\Http\Controllers\Admin\IntegrationAccountController;
+use App\Http\Controllers\Admin\IntegrationController;
 use App\Http\Controllers\Admin\IspController;
+use App\Http\Controllers\Admin\MicrosoftConsentController;
 use App\Http\Controllers\Admin\RecordFieldController;
 use App\Http\Controllers\Admin\RecordTypeController;
 use App\Http\Controllers\Admin\TagController;
@@ -65,25 +68,25 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
 
     // Clés d'accès du compte : ajout et suppression après confirmation de l'identité.
     Route::get('/profile/passkeys/options', [PasskeyController::class, 'options'])
-        ->middleware(['no-store', 'throttle:passkeys', 'recently-confirmed:default'])
+        ->middleware(['no-store', 'throttle:passkeys', 'recently-confirmed'])
         ->name('profile.passkeys.options');
     Route::post('/profile/passkeys', [PasskeyController::class, 'store'])
-        ->middleware(['no-store', 'throttle:passkeys', 'recently-confirmed:default'])
+        ->middleware(['no-store', 'throttle:passkeys', 'recently-confirmed'])
         ->name('profile.passkeys.store');
     Route::put('/profile/passkeys/{passkey}', [PasskeyController::class, 'update'])->name('profile.passkeys.update');
     Route::delete('/profile/passkeys/{passkey}', [PasskeyController::class, 'destroy'])
         ->middleware('password.confirm')
         ->name('profile.passkeys.destroy');
 
-    // Gestionnaire de mots de passe : déverrouillé uniquement par clé d'accès.
-    // Le contrôle d'accès au client (404) précède le contrôle du verrou.
+    // Gestionnaire de mots de passe : déverrouillé uniquement par clé d'accès,
+    // pour 5 minutes. Le même verrou protège la révélation des secrets sur les
+    // fiches. Le contrôle d'accès au client (404) précède le contrôle du verrou.
     Route::prefix('vault')->name('vault.')->group(function (): void {
         Route::get('/unlock/options', [VaultUnlockController::class, 'options'])
             ->middleware(['no-store', 'throttle:passkeys'])
             ->name('unlock.options');
         Route::post('/unlock', [VaultUnlockController::class, 'store'])->middleware('throttle:passkeys')->name('unlock');
         Route::post('/lock', [VaultUnlockController::class, 'destroy'])->name('lock');
-        Route::get('/status', [VaultUnlockController::class, 'status'])->middleware('vault.unlocked')->name('status');
 
         Route::get('/', [VaultController::class, 'index'])->middleware('vault.unlocked')->name('index');
 
@@ -93,9 +96,6 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
             Route::put('/folders/{vaultFolder}', [VaultFolderController::class, 'update'])->name('folders.update');
             Route::delete('/folders/{vaultFolder}', [VaultFolderController::class, 'destroy'])->name('folders.destroy');
             Route::post('/credentials/move', [VaultCredentialController::class, 'move'])->name('credentials.move');
-            Route::post('/credentials/{credential}/reveal', [VaultCredentialController::class, 'reveal'])
-                ->middleware(['no-store', 'throttle:secrets'])
-                ->name('credentials.reveal');
         });
     });
 
@@ -153,8 +153,10 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         Route::resource('certificates', CertificateController::class);
 
         Route::resource('credentials', CredentialController::class)->only(['index', 'store', 'update', 'destroy']);
+        // Révélation ou copie d'un secret, depuis les fiches comme depuis le
+        // gestionnaire : mots de passe déverrouillés par clé d'accès.
         Route::post('/credentials/{credential}/reveal', [CredentialController::class, 'reveal'])
-            ->middleware(['no-store', 'throttle:secrets', 'recently-confirmed:secrets'])
+            ->middleware(['no-store', 'throttle:secrets', 'vault.unlocked'])
             ->name('credentials.reveal');
 
         Route::resource('documents', DocumentController::class);
@@ -238,12 +240,28 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         });
         Route::resource('tags', TagController::class)->only(['index', 'store', 'update', 'destroy']);
 
+        // Intégrations (distributeurs, Microsoft 365...) : identifiants chiffrés, licences synchronisées.
+        Route::prefix('integrations')->name('integrations.')->group(function (): void {
+            Route::get('/', [IntegrationController::class, 'index'])->name('index');
+            Route::get('/microsoft365/consent', [MicrosoftConsentController::class, 'redirect'])->middleware('throttle:integrations')->name('microsoft.consent');
+            Route::get('/microsoft365/callback', [MicrosoftConsentController::class, 'callback'])->middleware('throttle:integrations')->name('microsoft.callback');
+            Route::get('/{provider}', [IntegrationController::class, 'show'])->name('show');
+            Route::put('/{provider}', [IntegrationController::class, 'update'])->name('update');
+            Route::delete('/{provider}', [IntegrationController::class, 'destroy'])->name('destroy');
+            Route::post('/{provider}/test', [IntegrationController::class, 'test'])->middleware('throttle:integrations')->name('test');
+            Route::post('/{provider}/sync', [IntegrationController::class, 'sync'])->middleware('throttle:integrations')->name('sync');
+            Route::post('/{provider}/accounts', [IntegrationAccountController::class, 'store'])->middleware('throttle:integrations')->name('accounts.store');
+            Route::post('/{provider}/accounts/match', [IntegrationAccountController::class, 'match'])->name('accounts.match');
+            Route::put('/{provider}/accounts/{account}', [IntegrationAccountController::class, 'update'])->name('accounts.update');
+            Route::delete('/{provider}/accounts/{account}', [IntegrationAccountController::class, 'destroy'])->name('accounts.destroy');
+        });
+
         // Mises à jour de l'application (installation : confirmation récente de l'identité).
         Route::get('/updates', [UpdateController::class, 'index'])->name('updates.index');
         Route::get('/updates/status', [UpdateController::class, 'status'])->name('updates.status');
         Route::post('/updates/check', [UpdateController::class, 'check'])->middleware('throttle:update-checks')->name('updates.check');
         Route::post('/updates/apply', [UpdateController::class, 'apply'])
-            ->middleware(['throttle:update-checks', 'recently-confirmed:default'])
+            ->middleware(['throttle:update-checks', 'recently-confirmed'])
             ->name('updates.apply');
     });
 });

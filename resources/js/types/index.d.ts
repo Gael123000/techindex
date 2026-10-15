@@ -29,7 +29,8 @@ export interface SharedProps {
     } | null;
     flash: { success: string | null; error: string | null; status: string | null };
     update_available: boolean;
-    nav: { clients: Array<{ id: number; name: string; reference: string }> } | null;
+    /** Secondes avant le reverrouillage des mots de passe (0 : verrouillés). */
+    vault: { expires_in: number } | null;
     [key: string]: unknown;
 }
 
@@ -68,6 +69,8 @@ export interface ClientContext {
     name: string;
     reference: string;
     status: 'active' | 'archived';
+    /** Place dans un groupe d'entreprises (entreprise mère seulement si elle est visible). */
+    group: { role_label: string | null; parent: { id: number; name: string } | null };
     logo_url: string | null;
     permissions: ClientPermissions;
     counts: Record<string, number>;

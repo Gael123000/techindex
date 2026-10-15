@@ -134,7 +134,7 @@ function destroy(): void {
                 </tbody>
             </table>
         </div>
-        <EmptyState v-else :icon="KeyRound" title="Aucun accès enregistré" description="Les identifiants sont chiffrés et ne sont révélés qu'à la demande, après confirmation du mot de passe." />
+        <EmptyState v-else :icon="KeyRound" title="Aucun accès enregistré" description="Les identifiants sont chiffrés et ne sont révélés qu'à la demande, après déverrouillage par clé d'accès." />
     </section>
 
     <CredentialFormModal

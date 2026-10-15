@@ -60,13 +60,15 @@ app/
     Internet/            Conversion des anciens services « Connexion Internet » en liens FAI
     Inventory/           Équipements (interfaces, filtres)
     Records/             Constructeur de fiches : structure SQL, valeurs, extensions
+    Integrations/        Connecteurs (Providers/), synchronisation, rapprochement des comptes
     Search/              Recherche globale
     Spreadsheets/        Lecture / écriture CSV et XLSX (OpenSpout)
   Console/Commands/      Commandes techindex:* (administrateur, clés, sauvegardes, diagnostic)
 resources/js/
   Pages/                 Une page Vue par écran (Inertia)
   Components/            Composants réutilisables (formulaires, tableaux, modales, secrets)
-  Layouts/               AppLayout (menu, recherche, contexte client), AuthLayout
+  Layouts/               AppLayout (menu, onglets, recherche, menu contextuel), AuthLayout
+  composables/           État partagé côté navigateur (useTabs : onglets ; useContextMenu ; coffre)
 docker/                  Configuration Nginx, PHP, MariaDB et scripts des conteneurs
 scripts/techindex.sh     Exploitation sous Linux (Docker)
 scripts/techindex-plesk.sh  Déploiement et exploitation sur un hébergement Plesk (sans Docker)
@@ -128,7 +130,7 @@ tags ──< taggables (polymorphe)          audit_logs (client_id facultatif)  
 | `credentials` | Accès : libellé, type, hôte, identifiant (métadonnées en clair), et `secret_ciphertext` chiffré avec l'identifiant de la clé utilisée. |
 | `documents`, `document_versions` | Base de connaissances : HTML filtré, texte brut pour la recherche, responsable, dernière vérification, périodicité de revue, historique des versions. |
 | `attachments` | Pièces jointes : nom d'origine, chemin de stockage généré (UUID), type MIME détecté, taille, empreinte SHA-256, dossier de l'explorateur. |
-| `passkeys` | Clés d'accès (WebAuthn) d'un utilisateur : nom, identifiant de la clé, clé **publique** et compteur de signatures, dernière utilisation. |
+| `passkeys` | Clés d'accès (WebAuthn) d'un utilisateur : type (liste), nom, identifiant de la clé, clé **publique** et compteur de signatures, dernière utilisation. |
 | `vault_folders`, `file_folders` | Dossiers du gestionnaire de mots de passe et de l'explorateur, par client. La racine du client est implicite (parent nul) ; une colonne générée garantit l'unicité du nom parmi les dossiers frères, casse ignorée. |
 | `audit_logs` | Action, auteur, client, objet, différences de champs non sensibles, adresse IP, navigateur. |
 | `imports` | Imports CSV / Excel : correspondance des colonnes, mode, rapport ligne par ligne. |
@@ -169,7 +171,8 @@ Ce module est détaillé dans [secrets-et-cles.md](secrets-et-cles.md).
 - Une révélation passe par :
   - une requête POST dédiée ;
   - le droit « secrets » ;
-  - une confirmation du mot de passe datant de moins de 10 minutes ;
+  - un déverrouillage par clé d'accès datant de moins de 5 minutes, commun
+    aux fiches et au gestionnaire de mots de passe ;
   - une limitation du débit ;
   - un en-tête `Cache-Control: no-store` ;
   - une entrée d'audit sans la valeur.
@@ -187,9 +190,10 @@ Ce module est détaillé dans [secrets-et-cles.md](secrets-et-cles.md).
   vérification de l'utilisateur (biométrie, code PIN) est exigée. Les routes
   du paquet ne sont pas utilisées : TechIndex déclare les siennes, avec un défi
   à usage unique propre à chaque usage (connexion, confirmation, coffre).
-- Gestionnaire de mots de passe : déverrouillé uniquement par clé d'accès,
-  reverrouillé après inactivité et au bout d'une durée maximale
-  (middleware `vault.unlocked`, détails dans [secrets-et-cles.md](secrets-et-cles.md)).
+- Mots de passe (gestionnaire et révélation depuis les fiches) : déverrouillés
+  uniquement par clé d'accès, reverrouillés 5 minutes après l'ouverture même
+  en cas d'activité (middleware `vault.unlocked`, détails dans
+  [secrets-et-cles.md](secrets-et-cles.md)).
 - Limitation des tentatives de connexion, de double authentification et de
   réinitialisation.
 - Sessions chiffrées en base, avec une durée d'inactivité et une durée absolue.
@@ -215,6 +219,12 @@ Ce module est détaillé dans [secrets-et-cles.md](secrets-et-cles.md).
 - Hôte : en production, seules les requêtes adressées au domaine d'`APP_URL`
   sont acceptées.
 - Erreurs : page générique sans détail technique quand `APP_DEBUG=false`.
+- Stockage du navigateur : seules des préférences d'affichage (menu réduit,
+  catégories dépliées) et les onglets ouverts y sont conservés, par
+  utilisateur. Un onglet ne contient qu'un chemin interne et le titre de la
+  page, jamais de donnée de formulaire ni de secret ; les chemins relus sont
+  vérifiés (même origine) et chaque page est rechargée depuis le serveur, qui
+  contrôle les droits à chaque affichage.
 - Pièces jointes :
   - stockées hors de la racine web, sous un nom aléatoire ;
   - type validé sur le contenu réel (`finfo`) avec une liste blanche

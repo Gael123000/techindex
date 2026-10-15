@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\ClientPermission;
 use App\Models\Client;
 use App\Models\CustomRecord;
 use App\Models\RecordType;
@@ -23,11 +24,20 @@ final class ClientContext
             ->withCount(['sites', 'contacts', 'equipment', 'internetLinks', 'services', 'licenses', 'certificates', 'credentials', 'documents'])
             ->first();
 
+        // Entreprise mère affichée seulement si elle est attribuée à l'utilisateur.
+        $parent = $client->parent_id !== null && $user->hasClientPermission($client->parent_id, ClientPermission::View)
+            ? Client::query()->whereKey($client->parent_id)->first(['id', 'name'])
+            : null;
+
         return [
             'id' => $client->id,
             'name' => $client->name,
             'reference' => $client->reference,
             'status' => $client->status->value,
+            'group' => [
+                'role_label' => $client->group_role?->shortLabel(),
+                'parent' => $parent?->only(['id', 'name']),
+            ],
             'logo_url' => $client->hasLogo() ? route('clients.logo', ['client' => $client, 'v' => $client->updated_at?->getTimestamp()]) : null,
             'permissions' => $user->permissionsFor($client),
             'counts' => [

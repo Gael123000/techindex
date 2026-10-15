@@ -140,9 +140,10 @@ function ensureSupported(): void {
 }
 
 /**
- * Crée une clé d'accès sur l'appareil et l'enregistre sur le compte.
+ * Crée une clé d'accès sur l'appareil et l'enregistre sur le compte, avec sa
+ * description (type et précision).
  */
-export async function registerPasskey(optionsUrl: string, storeUrl: string, name: string): Promise<void> {
+export async function registerPasskey(optionsUrl: string, storeUrl: string, description: Json): Promise<void> {
     ensureSupported();
 
     try {
@@ -153,7 +154,7 @@ export async function registerPasskey(optionsUrl: string, storeUrl: string, name
             throw new PasskeyError('Aucune clé d\'accès n\'a été créée.');
         }
 
-        await requestJson(storeUrl, { method: 'POST', body: { name, credential: serialize(credential) } });
+        await requestJson(storeUrl, { method: 'POST', body: { ...description, credential: serialize(credential) } });
     } catch (error) {
         throw explain(error);
     }

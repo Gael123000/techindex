@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { Archive, ArchiveRestore, Download, FolderOpen, Mail, MapPin, Pencil, Phone } from '@lucide/vue';
+import { Archive, ArchiveRestore, CornerDownRight, Download, FolderOpen, Mail, MapPin, Network, Pencil, Phone, Plus } from '@lucide/vue';
 import { ref } from 'vue';
 import { route } from 'ziggy-js';
 import AttachmentsPanel from '@/components/AttachmentsPanel.vue';
@@ -61,6 +61,14 @@ const props = defineProps<{
         site: { id: number; name: string } | null;
     }>;
     sites: Array<{ id: number; name: string; city: string | null; equipment_count: number }>;
+    group: {
+        role: string | null;
+        role_label: string | null;
+        parent: { id: number; name: string; reference: string; group_role_label: string | null } | null;
+        parent_hidden: boolean;
+        members: Array<{ id: number; name: string; reference: string; city: string | null; status: 'active' | 'archived'; group_role_label: string | null; members_count: number }>;
+        can_add_member: boolean;
+    };
     upcoming: { warranties: Dated[]; licenses: Dated[]; certificates: Dated[] };
     attachments: AttachmentsPayload;
     history: AuditEntry[];
@@ -196,6 +204,43 @@ const address = [props.client.address_line1, props.client.address_line2, [props.
         </div>
 
         <div class="space-y-5">
+            <section class="card" aria-labelledby="group-title">
+                <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <h2 id="group-title" class="flex items-center gap-2 text-sm font-semibold text-navy-900">
+                        <Network class="h-4 w-4 text-slate-400" aria-hidden="true" /> Groupe
+                    </h2>
+                    <Link v-if="group.can_add_member" :href="route('clients.create', { parent: client.id })" class="link inline-flex items-center gap-1 text-xs">
+                        <Plus class="h-3.5 w-3.5" aria-hidden="true" /> Ajouter une entreprise
+                    </Link>
+                </header>
+                <div class="space-y-3 px-4 py-3 text-sm">
+                    <p v-if="group.parent">
+                        <span class="text-xs text-slate-500">{{ group.role_label ?? 'Rattaché' }} de</span><br />
+                        <Link :href="route('clients.show', group.parent.id)" class="link">{{ group.parent.name }}</Link>
+                        <span class="text-xs text-slate-500"> · {{ group.parent.group_role_label ?? 'Tête de groupe' }}</span>
+                    </p>
+                    <p v-else-if="group.parent_hidden" class="text-slate-600">{{ group.role_label ?? 'Rattaché' }} d'une entreprise qui ne vous est pas attribuée.</p>
+                    <p v-else-if="group.members.length" class="text-slate-700">{{ group.role_label ?? 'Tête de groupe' }}</p>
+                    <p v-else class="text-slate-500">Client indépendant : aucune entreprise mère ni entreprise rattachée.</p>
+
+                    <div v-if="group.members.length">
+                        <p class="mb-1 text-xs text-slate-500">{{ group.members.length }} entreprise(s) rattachée(s)</p>
+                        <ul class="divide-y divide-slate-100 rounded-md border border-slate-200 bg-slate-50">
+                            <li v-for="member in group.members" :key="member.id" class="flex items-center gap-2 px-3 py-2">
+                                <CornerDownRight class="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                                <span class="min-w-0 flex-1">
+                                    <Link :href="route('clients.show', member.id)" class="link block truncate">{{ member.name }}</Link>
+                                    <span class="block truncate text-xs text-slate-500">
+                                        {{ [member.group_role_label, member.city, member.members_count ? `${member.members_count} rattachée(s)` : null].filter(Boolean).join(' · ') }}
+                                    </span>
+                                </span>
+                                <Badge v-if="member.status === 'archived'" color="amber">Archivé</Badge>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
             <section class="card" aria-labelledby="sites-title">
                 <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                     <h2 id="sites-title" class="text-sm font-semibold text-navy-900">Sites</h2>

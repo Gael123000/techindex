@@ -5,8 +5,6 @@ namespace App\Http\Controllers\Vault;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Credential;
-use App\Secrets\CredentialSecrets;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,33 +14,12 @@ use Illuminate\Validation\Rule;
 /**
  * Actions du gestionnaire de mots de passe sur les accès d'un client.
  *
- * La création et la modification passent par les routes habituelles des
- * accès (mêmes règles, même validation) : seuls la révélation depuis le
- * coffre déverrouillé et le rangement en dossiers sont propres au gestionnaire.
+ * La création, la modification et la révélation passent par les routes
+ * habituelles des accès (mêmes règles, même verrou par clé d'accès) : seul
+ * le rangement en dossiers est propre au gestionnaire.
  */
 class VaultCredentialController extends Controller
 {
-    public function __construct(private readonly CredentialSecrets $secrets) {}
-
-    /**
-     * Révélation ou copie d'un secret. Le coffre a été déverrouillé par clé
-     * d'accès (middleware) ; le droit "secrets", la limitation du débit et
-     * la journalisation s'appliquent comme ailleurs.
-     */
-    public function reveal(Request $request, Client $client, Credential $credential): JsonResponse
-    {
-        Gate::authorize('reveal', $credential);
-
-        $purpose = $request->validate([
-            'purpose' => ['required', Rule::in([CredentialSecrets::PURPOSE_REVEAL, CredentialSecrets::PURPOSE_COPY])],
-        ])['purpose'];
-
-        return response()->json([
-            'secret' => $this->secrets->reveal($credential, $request->user(), $purpose),
-            'expires_in' => 30,
-        ]);
-    }
-
     /**
      * Range un ou plusieurs accès dans un dossier (ou à la racine du client).
      */

@@ -47,6 +47,8 @@ const props = defineProps<{
     equipment: Option<number>[];
     /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
     extension: RecordFormDefinition | null;
+    /** Intégration d'où provient la licence (modification). */
+    source?: { label: string; account: string; synced_at: string | null } | null;
 }>();
 
 const l = props.license;
@@ -91,6 +93,10 @@ function submit(): void {
     />
 
     <form class="space-y-5" novalidate @submit.prevent="submit">
+        <p v-if="source" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Licence synchronisée depuis <strong>{{ source.label }}</strong> : le nom, l'éditeur, les quantités, les dates, la périodicité et le statut
+            seront remplacés à la prochaine synchronisation. Le site, le coût, le préavis, les équipements et les notes sont conservés.
+        </p>
         <FormSection title="Produit">
             <FormField id="name" label="Nom" :error="form.errors.name" required>
                 <template #default="{ describedBy, invalid }">

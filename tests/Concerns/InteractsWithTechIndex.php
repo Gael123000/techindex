@@ -6,12 +6,14 @@ use App\Enums\UserRole;
 use App\Models\Client;
 use App\Models\ClientAssignment;
 use App\Models\User;
+use App\Services\Vault\VaultLock;
 use Database\Seeders\ReferenceDataSeeder;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /**
- * Outils communs aux tests : comptes, affectations, confirmation récente.
+ * Outils communs aux tests : comptes, affectations, confirmation récente,
+ * mots de passe déverrouillés.
  */
 trait InteractsWithTechIndex
 {
@@ -81,5 +83,14 @@ trait InteractsWithTechIndex
     protected function withRecentConfirmation(): static
     {
         return $this->withSession(['auth.password_confirmed_at' => now()->getTimestamp(), 'auth.authenticated_at' => now()->getTimestamp()]);
+    }
+
+    /**
+     * Simule des mots de passe déverrouillés par clé d'accès à l'instant
+     * (la cérémonie elle-même est testée dans VaultTest).
+     */
+    protected function withUnlockedVault(User $user): static
+    {
+        return $this->withSession([VaultLock::SESSION_KEY => ['user_id' => $user->getKey(), 'unlocked_at' => now()->getTimestamp()]]);
     }
 }

@@ -14,7 +14,6 @@ use App\Models\Equipment;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\VaultFolder;
-use App\Services\Vault\VaultLock;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -67,7 +66,6 @@ class VaultController extends Controller
             'clients' => $this->clientList($user),
             'client' => null,
             'search' => ['q' => $term, 'results' => $results],
-            'lock' => $this->lockState($request),
         ]);
     }
 
@@ -99,7 +97,7 @@ class VaultController extends Controller
             ->paginate(100)
             ->withQueryString();
 
-        $credentials->setCollection($this->presentCredentials($credentials->getCollection(), $client, $user, 'vault.clients.credentials.reveal'));
+        $credentials->setCollection($this->presentCredentials($credentials->getCollection(), $client, $user));
 
         $currentFolderId = $selection['type'] === 'folder' ? $selection['id'] : null;
         $showSubfolders = in_array($selection['type'], ['all', 'folder'], true) && $term === '';
@@ -164,7 +162,6 @@ class VaultController extends Controller
                 'write_secrets' => $canContribute && $user->hasClientPermission($client, ClientPermission::Secrets),
                 'reveal' => $user->hasClientPermission($client, ClientPermission::Secrets),
             ],
-            'lock' => $this->lockState($request),
         ]);
     }
 
@@ -300,16 +297,5 @@ class VaultController extends Controller
                 'count' => $client->credentials_count,
             ])
             ->all();
-    }
-
-    /**
-     * @return array{expires_in: int, idle_timeout: int}
-     */
-    private function lockState(Request $request): array
-    {
-        return [
-            'expires_in' => VaultLock::expiresIn($request),
-            'idle_timeout' => VaultLock::idleTimeout(),
-        ];
     }
 }
