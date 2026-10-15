@@ -46,3 +46,6 @@ Thumbs.db
 compose.override.yaml
 /.deploy
 /.techindex-expose-db
+
+# Dossiers de travail locaux de Claude Code (git worktree)
+/.claude/worktrees/
