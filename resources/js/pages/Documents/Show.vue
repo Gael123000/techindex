@@ -7,11 +7,12 @@ import Badge from '@/components/Badge.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
 import DeleteResource from '@/components/DeleteResource.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import TagList from '@/components/TagList.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDate, formatDateTime } from '@/lib/format';
-import type { AttachmentsPayload, AuditEntry, ClientContext, TagRef } from '@/types';
+import type { AttachmentsPayload, AuditEntry, ClientContext, RecordPresentedSection, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -34,6 +35,7 @@ const props = defineProps<{
         tags: TagRef[];
         equipment: Array<{ id: number; name: string; hostname: string | null }>;
         services: Array<{ id: number; name: string; category: string }>;
+        internet_links: Array<{ id: number; name: string; operator: string | null }>;
         updated_at: string;
         editor: { id: number; name: string } | null;
     };
@@ -41,6 +43,8 @@ const props = defineProps<{
     attachments: AttachmentsPayload;
     history: AuditEntry[];
     can: { update: boolean; delete: boolean };
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
 }>();
 
 function verify(): void {
@@ -76,6 +80,8 @@ function verify(): void {
                 <header class="border-b border-slate-200 px-4 py-3"><h2 class="text-sm font-semibold text-navy-900">Historique</h2></header>
                 <HistoryList :entries="history" />
             </section>
+
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
         </div>
 
         <div class="space-y-5">
@@ -115,7 +121,11 @@ function verify(): void {
                         <span class="text-xs text-slate-500">{{ item.category }} · </span>
                         <Link :href="route('clients.services.show', [context.id, item.id])" class="link">{{ item.name }}</Link>
                     </li>
-                    <li v-if="!document.equipment.length && !document.services.length" class="px-4 py-3 text-slate-500">Aucun élément lié.</li>
+                    <li v-for="item in document.internet_links" :key="`i${item.id}`" class="px-4 py-2">
+                        <span class="text-xs text-slate-500">Lien Internet<template v-if="item.operator"> {{ item.operator }}</template> · </span>
+                        <Link :href="route('clients.internet-links.show', [context.id, item.id])" class="link">{{ item.name }}</Link>
+                    </li>
+                    <li v-if="!document.equipment.length && !document.services.length && !document.internet_links.length" class="px-4 py-3 text-slate-500">Aucun élément lié.</li>
                 </ul>
             </section>
 

@@ -36,17 +36,24 @@ vérifiée, par un test automatisé ou une vérification manuelle (voir
   - fournisseur, URL d'administration, notes et étiquettes.
 - Plusieurs interfaces réseau par équipement (IP, MAC, sous-réseau, interface principale).
 - Liens typés entre équipements, affichés dans les deux sens.
-- Champs personnalisés typés (texte, nombre, date, oui/non, liste, URL), par
-  type d'équipement ou communs.
+- Champs ajoutés avec le constructeur de fiches, éventuellement réservés à
+  certains types d'équipement (condition d'affichage).
 - Accès liés et pièces jointes sur la fiche de l'équipement.
 - Liste globale des équipements de tous les clients accessibles, avec filtres.
 
 ### Réseaux et services
 
 - VLAN et sous-réseaux (CIDR validé, passerelle, DNS, DHCP), avec le nombre
-  d'adresses utilisées.
+  d'adresses utilisées, leur usage (LAN, WAN, DMZ...) et le lien Internet qui
+  dessert un réseau WAN.
+- Onglet **FAI** : liens Internet du client avec l'opérateur du catalogue (logo,
+  assistance, espace client, page d'état du réseau), la technologie, les
+  débits, les adresses IP publiques, le raccordement WAN (mode, identifiant,
+  VLAN opérateur, passerelle, DNS), le contrat (numéro client, référence de
+  ligne, GTR, coût, fin d'engagement), les équipements, réseaux, documents et
+  accès liés. Les anciens services « Connexion Internet » y ont été convertis.
 - Services par catégorie, chacune avec ses champs propres validés côté serveur :
-  - accès Internet, VPN, domaine et DNS ;
+  - VPN, domaine et DNS ;
   - hébergement, cloud, messagerie ;
   - application métier, sauvegarde avec procédure de restauration.
 - Licences, abonnements et contrats de support : quantité, fournisseur, coût,
@@ -122,10 +129,25 @@ Voir [secrets-et-cles.md](secrets-et-cles.md).
 - Téléchargement contrôlé : affichage en ligne seulement pour les images et
   PDF sûrs, `nosniff`.
 
+### Constructeur de fiches
+
+- Fiches créées par un administrateur : un onglet par fiche dans chaque client,
+  une vraie table SQL par fiche (nom choisi), une colonne typée par champ.
+- 18 types de champs, sections de 1 à 3 colonnes, largeur des champs,
+  glisser-déposer, conditions d'affichage, aperçu, liens entre fiches (avec
+  la liste des fiches qui désignent un élément).
+- Champs ajoutés aux fiches par défaut, dont les champs d'origine restent
+  verrouillés.
+- Historique champ par champ, étiquettes, pièces jointes, export CSV / Excel
+  et recherche globale pour les fiches créées.
+
 ### Recherche globale
 
+- Résultats affichés pendant la frappe sous la barre de recherche (Ctrl+K),
+  navigation au clavier ; la page de recherche se met aussi à jour en direct.
 - Elle porte sur les clients, sites, équipements (nom, modèle, numéro de série,
-  IP, MAC), services, documents (contenu) et étiquettes.
+  IP, MAC), liens Internet (opérateur, référence de ligne, IP publiques),
+  services, documents (contenu), fiches créées et étiquettes.
 - Filtres par client, site, type et statut, avec extrait du contenu des documents.
 - Droits appliqués dans la requête ; secrets jamais indexés ni recherchés.
 - Champ de recherche présent dans l'en-tête de toutes les pages.
@@ -284,9 +306,17 @@ Fonctionnelles :
 - **Documentation** :
   - pas de comparaison visuelle entre deux versions (chacune se consulte) ;
   - pas d'image intégrée dans le texte : les images se joignent en pièces jointes.
-- **Catégories de services** : fixes (liste prévue dans le code), contrairement
-  aux types d'équipement et aux champs personnalisés, qui sont paramétrables.
-  Les champs personnalisés ne concernent que les équipements.
+- **Catégories de services** : fixes (liste prévue dans le code) ; des champs
+  peuvent leur être ajoutés avec le constructeur de fiches.
+- **Constructeur de fiches** :
+  - les fiches créées sont propres à chaque client (pas de fiche globale
+    commune à tous les clients) ;
+  - pas d'import CSV / Excel pour les fiches créées ;
+  - les champs d'origine des fiches par défaut ne se déplacent pas : les
+    champs ajoutés s'affichent dans leurs propres sections, en bas.
+- **Logos des opérateurs** : une vingtaine d'opérateurs (souvent régionaux ou
+  professionnels) n'ont pas de logo libre sur Wikimedia Commons ; leurs
+  initiales s'affichent et un administrateur peut déposer le logo.
 - **Pas de cartographie graphique** du réseau ni des liens entre équipements :
   ils sont présentés sous forme de listes.
 - **Pas d'API** ni de connecteur (RMM, supervision, annuaire).

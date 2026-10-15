@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import { Download, Network, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { route } from 'ziggy-js';
@@ -8,12 +8,15 @@ import ClientHeader from '@/components/ClientHeader.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import FormField from '@/components/FormField.vue';
+import IspLogo from '@/components/IspLogo.vue';
 import Modal from '@/components/Modal.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
+import RecordValuesInline from '@/components/RecordValuesInline.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordPresentedSection, RecordValue } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -31,6 +34,13 @@ interface Subnet {
     id: number;
     site_id: number | null;
     vlan_id: number | null;
+    purpose: string | null;
+    purpose_label: string | null;
+    internet_link_id: number | null;
+    internet_link: { id: number; name: string; operator: string | null; logo_url: string | null } | null;
+    /** Champs ajoutés avec le constructeur de fiches. */
+    fields: Record<string, RecordValue>;
+    extra: RecordPresentedSection[];
     name: string;
     cidr: string;
     gateway: string | null;
@@ -43,7 +53,16 @@ interface Subnet {
     vlan: { id: number; number: number; name: string } | null;
 }
 
-const props = defineProps<{ context: ClientContext; vlans: Vlan[]; subnets: Subnet[]; sites: Option<number>[]; can: { edit: boolean } }>();
+const props = defineProps<{
+    context: ClientContext;
+    vlans: Vlan[];
+    subnets: Subnet[];
+    sites: Option<number>[];
+    purposes: Option[];
+    internetLinks: Option<number>[];
+    extension: RecordFormDefinition | null;
+    can: { edit: boolean };
+}>();
 
 const vlanOptions = computed(() => props.vlans.map((vlan) => ({ value: vlan.id, label: `${vlan.number} – ${vlan.name}` })));
 
@@ -56,6 +75,8 @@ const editingSubnet = ref<Subnet | null>(null);
 const subnetForm = useForm({
     site_id: null as number | null,
     vlan_id: null as number | null,
+    purpose: null as string | null,
+    internet_link_id: null as number | null,
     name: '',
     cidr: '',
     gateway: '',
@@ -63,6 +84,7 @@ const subnetForm = useForm({
     dhcp_enabled: false,
     dhcp_range: '',
     description: '',
+    fields: {} as Record<string, RecordValue>,
 });
 
 const toDelete = ref<{ type: 'vlan' | 'subnet'; id: number; label: string } | null>(null);
@@ -92,6 +114,8 @@ function openSubnet(subnet: Subnet | null): void {
     subnetForm.clearErrors();
     subnetForm.site_id = subnet?.site_id ?? null;
     subnetForm.vlan_id = subnet?.vlan_id ?? null;
+    subnetForm.purpose = subnet?.purpose ?? null;
+    subnetForm.internet_link_id = subnet?.internet_link_id ?? null;
     subnetForm.name = subnet?.name ?? '';
     subnetForm.cidr = subnet?.cidr ?? '';
     subnetForm.gateway = subnet?.gateway ?? '';
@@ -99,6 +123,7 @@ function openSubnet(subnet: Subnet | null): void {
     subnetForm.dhcp_enabled = subnet?.dhcp_enabled ?? false;
     subnetForm.dhcp_range = subnet?.dhcp_range ?? '';
     subnetForm.description = subnet?.description ?? '';
+    subnetForm.fields = { ...(subnet ? subnet.fields : (props.extension?.defaults ?? {})) };
     subnetModal.value = true;
 }
 
@@ -143,6 +168,7 @@ function destroy(): void {
                         <tr>
                             <th scope="col">Réseau</th>
                             <th scope="col">Nom</th>
+                            <th scope="col">Usage</th>
                             <th scope="col">VLAN</th>
                             <th scope="col">Site</th>
                             <th scope="col">Passerelle</th>
@@ -158,6 +184,20 @@ function destroy(): void {
                             <td>
                                 {{ subnet.name }}
                                 <p v-if="subnet.description" class="text-xs text-slate-500">{{ subnet.description }}</p>
+                                <RecordValuesInline :sections="subnet.extra" />
+                            </td>
+                            <td>
+                                <span v-if="subnet.purpose_label" class="text-xs">{{ subnet.purpose_label }}</span>
+                                <Link
+                                    v-if="subnet.internet_link"
+                                    :href="route('clients.internet-links.show', [context.id, subnet.internet_link.id])"
+                                    class="mt-0.5 flex items-center gap-1.5 text-xs"
+                                    :title="`Lien Internet : ${subnet.internet_link.name}`"
+                                >
+                                    <IspLogo :url="subnet.internet_link.logo_url" :name="subnet.internet_link.operator" size="xs" />
+                                    <span class="link">{{ subnet.internet_link.operator ?? subnet.internet_link.name }}</span>
+                                </Link>
+                                <span v-if="!subnet.purpose_label && !subnet.internet_link" class="text-slate-400">—</span>
                             </td>
                             <td>{{ subnet.vlan ? `${subnet.vlan.number} – ${subnet.vlan.name}` : '—' }}</td>
                             <td>{{ subnet.site?.name ?? '—' }}</td>
@@ -272,6 +312,21 @@ function destroy(): void {
                     <TextInput id="subnet_dns" v-model="subnetForm.dns_servers" placeholder="192.168.10.1, 1.1.1.1" :described-by="describedBy" :invalid="invalid" />
                 </template>
             </FormField>
+            <FormField id="subnet_purpose" label="Usage" :error="subnetForm.errors.purpose">
+                <template #default="{ describedBy, invalid }">
+                    <SelectInput id="subnet_purpose" v-model="subnetForm.purpose" :options="purposes" placeholder="— Non précisé —" :described-by="describedBy" :invalid="invalid" />
+                </template>
+            </FormField>
+            <FormField
+                id="subnet_internet_link"
+                label="Lien Internet (FAI)"
+                :error="subnetForm.errors.internet_link_id"
+                :hint="internetLinks.length ? 'Opérateur qui dessert ce réseau, pour un WAN par exemple.' : 'Aucun lien Internet : ajoutez-en un dans l’onglet FAI.'"
+            >
+                <template #default="{ describedBy, invalid }">
+                    <SelectInput id="subnet_internet_link" v-model="subnetForm.internet_link_id" :options="internetLinks" placeholder="— Aucun —" :described-by="describedBy" :invalid="invalid" />
+                </template>
+            </FormField>
             <FormField id="subnet_vlan" label="VLAN" :error="subnetForm.errors.vlan_id">
                 <template #default="{ describedBy, invalid }">
                     <SelectInput id="subnet_vlan" v-model="subnetForm.vlan_id" :options="vlanOptions" placeholder="— Aucun —" :described-by="describedBy" :invalid="invalid" />
@@ -293,6 +348,15 @@ function destroy(): void {
                     <TextArea id="subnet_description" v-model="subnetForm.description" :described-by="describedBy" :invalid="invalid" />
                 </template>
             </FormField>
+            <RecordFieldsForm
+                v-if="extension"
+                :definition="extension"
+                :values="subnetForm.fields"
+                :errors="subnetForm.errors"
+                :builtin="{ purpose: subnetForm.purpose }"
+                variant="embedded"
+                id-prefix="subnet-extra"
+            />
         </form>
         <template #footer>
             <button type="button" class="btn-secondary" @click="subnetModal = false">Annuler</button>

@@ -11,7 +11,7 @@ use App\Models\Certificate;
 use App\Models\Client;
 use App\Models\Contact;
 use App\Models\Credential;
-use App\Models\CustomField;
+use App\Models\CustomRecord;
 use App\Models\Document;
 use App\Models\DocumentCategory;
 use App\Models\Equipment;
@@ -19,8 +19,12 @@ use App\Models\EquipmentLink;
 use App\Models\EquipmentType;
 use App\Models\FileFolder;
 use App\Models\Import;
+use App\Models\InternetLink;
+use App\Models\Isp;
 use App\Models\License;
 use App\Models\Passkey;
+use App\Models\RecordField;
+use App\Models\RecordType;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\Subnet;
@@ -113,10 +117,14 @@ class AppServiceProvider extends ServiceProvider
             'equipment' => Equipment::class,
             'equipment_link' => EquipmentLink::class,
             'equipment_type' => EquipmentType::class,
-            'custom_field' => CustomField::class,
+            'record_type' => RecordType::class,
+            'record_field' => RecordField::class,
+            'custom_record' => CustomRecord::class,
             'vlan' => Vlan::class,
             'subnet' => Subnet::class,
             'service' => Service::class,
+            'isp' => Isp::class,
+            'internet_link' => InternetLink::class,
             'license' => License::class,
             'certificate' => Certificate::class,
             'credential' => Credential::class,
@@ -142,7 +150,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Import::class, ImportPolicy::class);
 
-        foreach ([Site::class, Contact::class, Equipment::class, EquipmentLink::class, Vlan::class, Subnet::class, Service::class, License::class, Certificate::class, Document::class, Attachment::class, VaultFolder::class, FileFolder::class] as $model) {
+        foreach ([Site::class, Contact::class, Equipment::class, EquipmentLink::class, Vlan::class, Subnet::class, Service::class, InternetLink::class, CustomRecord::class, License::class, Certificate::class, Document::class, Attachment::class, VaultFolder::class, FileFolder::class] as $model) {
             Gate::policy($model, ClientResourcePolicy::class);
         }
 
@@ -196,6 +204,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('uploads', fn (Request $request): Limit => Limit::perMinute(
             (int) config('techindex.attachments.uploads_per_minute', 120),
         )->by('uploads|'.$request->user()?->getAuthIdentifier()));
+
+        // Résultats instantanés de la barre de recherche (une requête par frappe, après une courte pause).
+        RateLimiter::for('search', fn (Request $request): Limit => Limit::perMinute(120)
+            ->by('search|'.$request->user()?->getAuthIdentifier()));
 
         RateLimiter::for('exports', fn (Request $request): Limit => Limit::perMinute(10)
             ->by('exports|'.$request->user()?->getAuthIdentifier()));

@@ -20,7 +20,7 @@ interface EquipmentType {
     icon: string;
     sort_order: number;
     equipment_count: number;
-    custom_fields_count: number;
+    fields_count: number;
 }
 
 defineProps<{ types: EquipmentType[]; icons: string[] }>();
@@ -79,7 +79,7 @@ function destroy(): void {
                     <td><span class="inline-flex items-center gap-2"><DynamicIcon :name="type.icon" class="h-4 w-4 text-slate-500" /> {{ type.name }}</span></td>
                     <td>{{ type.sort_order }}</td>
                     <td>{{ type.equipment_count }}</td>
-                    <td>{{ type.custom_fields_count }}</td>
+                    <td>{{ type.fields_count }}</td>
                     <td class="text-right whitespace-nowrap">
                         <button type="button" class="btn-ghost btn-sm" @click="open(type)"><Pencil class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">Modifier {{ type.name }}</span></button>
                         <button v-if="type.equipment_count === 0" type="button" class="btn-ghost btn-sm text-red-700" @click="toDelete = type">

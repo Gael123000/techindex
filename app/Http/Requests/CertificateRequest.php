@@ -4,12 +4,15 @@ namespace App\Http\Requests;
 
 use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class CertificateRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         return true;
@@ -41,6 +44,16 @@ class CertificateRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:20000'],
             'equipment_ids' => ['nullable', 'array', 'max:500'],
             'equipment_ids.*' => ['integer', Rule::exists('equipment', 'id')->where('client_id', $client->id)],
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('certificate', $this->route('certificate')),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return $this->extensionAttributes('certificate');
     }
 }

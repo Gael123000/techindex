@@ -5,6 +5,7 @@ namespace App\Services\Documents;
 use App\Models\Client;
 use App\Models\Document;
 use App\Models\User;
+use App\Services\Records\RecordExtensions;
 use App\Services\Tags\TagResolver;
 use Illuminate\Support\Facades\DB;
 
@@ -17,6 +18,7 @@ class DocumentService
     public function __construct(
         private readonly HtmlSanitizer $sanitizer,
         private readonly TagResolver $tags,
+        private readonly RecordExtensions $extensions,
     ) {}
 
     /**
@@ -85,9 +87,17 @@ class DocumentService
     {
         $beforeEquipment = $isNew ? null : $document->equipment()->pluck('name')->sort()->implode(', ');
         $beforeServices = $isNew ? null : $document->services()->pluck('name')->sort()->implode(', ');
+        $beforeLinks = $isNew ? null : $document->internetLinks()->pluck('name')->sort()->implode(', ');
 
         $document->equipment()->sync($data['equipment_ids'] ?? []);
         $document->services()->sync($data['service_ids'] ?? []);
+        // Champs ajoutés avec le constructeur de fiches.
+        $this->extensions->save('document', $document, (int) $document->client_id, $data, $isNew);
+
+        // Champ absent (ancien formulaire, import) : liens Internet inchangés.
+        if (array_key_exists('internet_link_ids', $data)) {
+            $document->internetLinks()->sync($data['internet_link_ids'] ?? []);
+        }
 
         if ($isNew) {
             $document->tags()->sync($this->tags->idsFor($data['tags'] ?? []));
@@ -98,5 +108,6 @@ class DocumentService
         $document->syncTagsWithAudit($this->tags->idsFor($data['tags'] ?? []));
         $document->addAuditChange('equipment', $beforeEquipment ?: null, $document->equipment()->pluck('name')->sort()->implode(', ') ?: null);
         $document->addAuditChange('services', $beforeServices ?: null, $document->services()->pluck('name')->sort()->implode(', ') ?: null);
+        $document->addAuditChange('internet_links', $beforeLinks ?: null, $document->internetLinks()->pluck('name')->sort()->implode(', ') ?: null);
     }
 }

@@ -14,10 +14,11 @@ defineOptions({ layout: AppLayout });
 const props = defineProps<{
     context: ClientContext;
     credentials: Paginated<CredentialRow>;
-    filters: { q: string; type: string | null; equipment: number | null; service: number | null };
+    filters: { q: string; type: string | null; equipment: number | null; service: number | null; internet_link: number | null };
     types: Option[];
     equipment: Option<number>[];
     services: Option<number>[];
+    internetLinks: Option<number>[];
     can: { create: boolean; write_secrets: boolean };
 }>();
 
@@ -39,7 +40,7 @@ const { filters } = useFilters(() => route('clients.credentials.index', props.co
         </p>
     </div>
 
-    <div class="card mb-4 grid grid-cols-1 gap-3 p-4 sm:grid-cols-4">
+    <div class="card mb-4 grid grid-cols-1 gap-3 p-4" :class="internetLinks.length ? 'sm:grid-cols-5' : 'sm:grid-cols-4'">
         <div>
             <label for="cred-q" class="sr-only">Rechercher</label>
             <input id="cred-q" v-model="filters.q" type="search" class="form-input" placeholder="Libellé, utilisateur, hôte…" />
@@ -56,6 +57,10 @@ const { filters } = useFilters(() => route('clients.credentials.index', props.co
             <label for="cred-srv" class="sr-only">Service</label>
             <SelectInput id="cred-srv" v-model="filters.service" :options="services" placeholder="Tous les services" />
         </div>
+        <div v-if="internetLinks.length">
+            <label for="cred-isp" class="sr-only">Lien Internet</label>
+            <SelectInput id="cred-isp" v-model="filters.internet_link" :options="internetLinks" placeholder="Tous les liens FAI" />
+        </div>
     </div>
 
     <CredentialsTable
@@ -64,6 +69,7 @@ const { filters } = useFilters(() => route('clients.credentials.index', props.co
         :types="types"
         :equipment="equipment"
         :services="services"
+        :internet-links="internetLinks"
         :can-edit="can.create"
         :can-write-secrets="can.write_secrets"
     />

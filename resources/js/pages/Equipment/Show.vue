@@ -12,6 +12,7 @@ import DynamicIcon from '@/components/DynamicIcon.vue';
 import ExpiryBadge from '@/components/ExpiryBadge.vue';
 import FormField from '@/components/FormField.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import Modal from '@/components/Modal.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
@@ -19,7 +20,7 @@ import TagList from '@/components/TagList.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDate, formatDateTime } from '@/lib/format';
-import type { AttachmentsPayload, AuditEntry, ClientContext, CredentialRow, Option, TagRef } from '@/types';
+import type { AttachmentsPayload, AuditEntry, ClientContext, CredentialRow, Option, RecordPresentedSection, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -57,7 +58,8 @@ const props = defineProps<{
         creator: { id: number; name: string } | null;
         editor: { id: number; name: string } | null;
     };
-    customFields: Array<{ label: string; type: string; value: string | null }>;
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
     links: Array<{ id: number; label: string; other: { id: number; name: string; hostname: string | null } | null; notes: string | null }>;
     services: Array<{ id: number; name: string; category: string; status: string }>;
     licenses: Array<{ id: number; name: string; expires_at: string | null; status: string }>;
@@ -213,18 +215,7 @@ const details: Array<{ label: string; value: () => string | null }> = [
                 <p v-else class="px-4 py-4 text-sm text-slate-500">Aucune adresse renseignée.</p>
             </section>
 
-            <section v-if="customFields.length" class="card p-5" aria-labelledby="eq-custom">
-                <h2 id="eq-custom" class="mb-3 text-sm font-semibold text-navy-900">Champs personnalisés</h2>
-                <dl class="dl-grid">
-                    <div v-for="field in customFields" :key="field.label">
-                        <dt>{{ field.label }}</dt>
-                        <dd>
-                            <a v-if="field.type === 'url' && field.value" :href="field.value" target="_blank" rel="noopener noreferrer" class="link break-all">{{ field.value }}</a>
-                            <template v-else>{{ field.type === 'date' && field.value ? formatDate(field.value) : (field.value ?? '—') }}</template>
-                        </dd>
-                    </div>
-                </dl>
-            </section>
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
 
             <CredentialsTable
                 :client-id="context.id"

@@ -27,12 +27,4 @@ class EquipmentType extends Model
     {
         return $this->hasMany(Equipment::class);
     }
-
-    /**
-     * @return HasMany<CustomField, $this>
-     */
-    public function customFields(): HasMany
-    {
-        return $this->hasMany(CustomField::class);
-    }
 }

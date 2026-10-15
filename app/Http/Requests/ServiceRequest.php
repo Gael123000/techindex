@@ -4,12 +4,15 @@ namespace App\Http\Requests;
 
 use App\Enums\ServiceCategory;
 use App\Enums\ServiceStatus;
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ServiceRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         return true;
@@ -25,7 +28,12 @@ class ServiceRequest extends FormRequest
         $category = ServiceCategory::tryFrom((string) $this->input('category'));
 
         return [
-            'category' => ['required', Rule::enum(ServiceCategory::class)],
+            'category' => [
+                'required',
+                Rule::enum(ServiceCategory::class),
+                // Les accès Internet se gèrent dans l'onglet FAI.
+                Rule::notIn($this->route('service')?->category === ServiceCategory::Internet ? [] : [ServiceCategory::Internet->value]),
+            ],
             'site_id' => ['nullable', 'integer', Rule::exists('sites', 'id')->where('client_id', $client->id)],
             'name' => ['required', 'string', 'max:255'],
             'provider' => ['nullable', 'string', 'max:150'],
@@ -41,6 +49,18 @@ class ServiceRequest extends FormRequest
             'tags' => ['nullable', 'array', 'max:20'],
             'tags.*' => ['string', 'max:60'],
             ...($category?->detailRules() ?? ['details' => ['nullable', 'array']]),
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('service', $this->route('service')),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'category.not_in' => 'Les accès Internet se documentent désormais dans l\'onglet « FAI » du client.',
         ];
     }
 
@@ -53,6 +73,6 @@ class ServiceRequest extends FormRequest
 
         return collect($category?->fields() ?? [])
             ->mapWithKeys(fn (array $field): array => ['details.'.$field['key'] => mb_strtolower($field['label'])])
-            ->all();
+            ->all() + $this->extensionAttributes('service');
     }
 }

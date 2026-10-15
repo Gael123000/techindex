@@ -79,14 +79,6 @@ class Equipment extends Model
     }
 
     /**
-     * @return HasMany<CustomFieldValue, $this>
-     */
-    public function customValues(): HasMany
-    {
-        return $this->hasMany(CustomFieldValue::class);
-    }
-
-    /**
      * Relations où cet équipement est la source ("héberge", "est protégé par"...).
      *
      * @return HasMany<EquipmentLink, $this>
@@ -110,6 +102,16 @@ class Equipment extends Model
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class);
+    }
+
+    /**
+     * Liens Internet (FAI) terminés ou routés par cet équipement.
+     *
+     * @return BelongsToMany<InternetLink, $this>
+     */
+    public function internetLinks(): BelongsToMany
+    {
+        return $this->belongsToMany(InternetLink::class);
     }
 
     /**

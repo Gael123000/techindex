@@ -7,6 +7,7 @@ use App\Enums\ClientPermission;
 use App\Enums\EquipmentStatus;
 use App\Enums\LicenseStatus;
 use App\Enums\RecordStatus;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Requests\ClientRequest;
 use App\Models\AuditLog;
@@ -31,7 +32,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     private const SORTS = ['name', 'reference', 'city', 'updated_at'];
 
@@ -96,6 +97,7 @@ class ClientController extends Controller
             'defaults' => ['reference' => Client::nextReference(), 'account_manager_id' => $request->user()->id, 'country' => 'France'],
             'managers' => $this->managerOptions(),
             'tags' => $this->tags->options(),
+            'extension' => $this->extensionForm('client', new Client, null),
         ]);
     }
 
@@ -106,10 +108,11 @@ class ClientController extends Controller
         $user = $request->user();
 
         $client = DB::transaction(function () use ($request, $user, $audit): Client {
-            $client = new Client($request->safe()->except(['tags', 'logo', 'remove_logo']));
+            $client = new Client($request->safe()->except(['tags', 'logo', 'remove_logo', 'fields']));
             $client->status = RecordStatus::Active;
             $this->storeLogo($request, $client);
             $client->save();
+            $this->saveExtension('client', $client, $client, $request->validated(), true);
 
             $client->tags()->sync($this->tags->idsFor($request->input('tags')));
 
@@ -160,6 +163,7 @@ class ClientController extends Controller
                     ->where('expires_at', '<=', $horizon)->orderBy('expires_at')->limit(5)->get(['id', 'client_id', 'name', 'expires_at']),
             ],
             'attachments' => $this->attachmentsFor($client, $client, $user),
+            'extension' => $this->extensionDisplay('client', $client, $client),
             'history' => AuditLog::query()->where('client_id', $client->id)->with('user:id,name')->latest('id')->limit(8)->get()
                 ->map(fn (AuditLog $log): array => AuditPresenter::present($log, $user)),
             'can' => [
@@ -188,6 +192,7 @@ class ClientController extends Controller
             'defaults' => null,
             'managers' => $this->managerOptions(),
             'tags' => $this->tags->options(),
+            'extension' => $this->extensionForm('client', $client, $client),
         ]);
     }
 
@@ -196,7 +201,8 @@ class ClientController extends Controller
         Gate::authorize('update', $client);
 
         DB::transaction(function () use ($request, $client): void {
-            $client->fill($request->safe()->except(['tags', 'logo', 'remove_logo']));
+            $client->fill($request->safe()->except(['tags', 'logo', 'remove_logo', 'fields']));
+            $this->saveExtension('client', $client, $client, $request->validated(), false);
 
             if ($request->boolean('remove_logo') && $client->logo_path !== null) {
                 $this->storage->disk()->delete($client->logo_path);

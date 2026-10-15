@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Client;
 use App\Enums\BillingPeriod;
 use App\Enums\LicenseKind;
 use App\Enums\LicenseStatus;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LicenseRequest;
@@ -21,7 +22,7 @@ use Inertia\Response;
 
 class LicenseController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     public function index(Request $request, Client $client): Response
     {
@@ -73,6 +74,7 @@ class LicenseController extends Controller
         return Inertia::render('Licenses/Form', [
             'context' => $this->context($client, $request),
             'license' => null,
+            'extension' => $this->extensionForm('license', $client, null),
             ...$this->formOptions($client),
         ]);
     }
@@ -82,10 +84,11 @@ class LicenseController extends Controller
         Gate::authorize('contribute', $client);
 
         $license = DB::transaction(function () use ($request, $client): License {
-            $license = new License($request->safe()->except('equipment_ids'));
+            $license = new License($request->safe()->except(['equipment_ids', 'fields']));
             $license->client()->associate($client);
             $license->save();
             $license->equipment()->sync($request->input('equipment_ids', []));
+            $this->saveExtension('license', $license, $client, $request->validated(), true);
 
             return $license;
         });
@@ -108,6 +111,7 @@ class LicenseController extends Controller
                 'billing_period_label' => $license->billing_period?->label(),
             ],
             'history' => $this->historyFor($license, $request->user()),
+            'extension' => $this->extensionDisplay('license', $client, $license, ['kind' => $license->kind->value, 'status' => $license->status->value]),
             'warnDays' => (int) config('techindex.alerts.license_days'),
             'can' => [
                 'update' => Gate::allows('update', $license),
@@ -123,6 +127,7 @@ class LicenseController extends Controller
         return Inertia::render('Licenses/Form', [
             'context' => $this->context($client, $request),
             'license' => [...$license->toArray(), 'equipment_ids' => $license->equipment()->pluck('equipment.id')],
+            'extension' => $this->extensionForm('license', $client, $license),
             ...$this->formOptions($client),
         ]);
     }
@@ -131,8 +136,9 @@ class LicenseController extends Controller
     {
         Gate::authorize('update', $license);
 
-        DB::transaction(function () use ($request, $license): void {
-            $license->fill($request->safe()->except('equipment_ids'));
+        DB::transaction(function () use ($request, $client, $license): void {
+            $license->fill($request->safe()->except(['equipment_ids', 'fields']));
+            $this->saveExtension('license', $license, $client, $request->validated(), false);
             $before = $license->equipment()->pluck('name')->sort()->implode(', ');
             $license->equipment()->sync($request->input('equipment_ids', []));
             $license->addAuditChange('equipment', $before ?: null, $license->equipment()->pluck('name')->sort()->implode(', ') ?: null);

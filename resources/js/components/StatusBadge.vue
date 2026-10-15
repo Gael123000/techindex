@@ -10,6 +10,7 @@ const colors: Record<string, string> = {
     published: 'green',
     completed: 'green',
     maintenance: 'amber',
+    pending: 'amber',
     draft: 'amber',
     queued: 'amber',
     processing: 'blue',
@@ -18,6 +19,7 @@ const colors: Record<string, string> = {
     inactive: 'slate',
     out_of_service: 'orange',
     cancelled: 'orange',
+    terminated: 'orange',
     revoked: 'red',
     failed: 'red',
     archived: 'slate',
@@ -33,6 +35,8 @@ const labels: Record<string, string> = {
     published: 'Publié',
     draft: 'Brouillon',
     cancelled: 'Résilié',
+    terminated: 'Résilié',
+    pending: 'En attente',
     revoked: 'Révoqué',
 };
 

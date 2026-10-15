@@ -19,12 +19,13 @@ const props = defineProps<{
     description?: string;
 }>();
 
-const tabs = computed(() => [
+const baseTabs = computed(() => [
     { key: 'overview', label: 'Vue d\'ensemble', href: route('clients.show', props.context.id), count: null },
     { key: 'sites', label: 'Sites', href: route('clients.sites.index', props.context.id), count: props.context.counts.sites },
     { key: 'contacts', label: 'Contacts', href: route('clients.contacts.index', props.context.id), count: props.context.counts.contacts },
     { key: 'equipment', label: 'Équipements', href: route('clients.equipment.index', props.context.id), count: props.context.counts.equipment },
     { key: 'network', label: 'Réseau', href: route('clients.network.index', props.context.id), count: null },
+    { key: 'internet', label: 'FAI', href: route('clients.internet-links.index', props.context.id), count: props.context.counts.internet_links ?? 0 },
     { key: 'services', label: 'Services', href: route('clients.services.index', props.context.id), count: props.context.counts.services },
     { key: 'licenses', label: 'Licences', href: route('clients.licenses.index', props.context.id), count: props.context.counts.licenses },
     { key: 'certificates', label: 'Certificats', href: route('clients.certificates.index', props.context.id), count: props.context.counts.certificates },
@@ -32,6 +33,31 @@ const tabs = computed(() => [
     { key: 'documents', label: 'Documentation', href: route('clients.documents.index', props.context.id), count: props.context.counts.documents },
     { key: 'history', label: 'Historique', href: route('clients.history', props.context.id), count: null },
 ]);
+
+// Fiches créées avec le constructeur : insérées après l'onglet choisi par l'administrateur.
+const tabs = computed(() => {
+    const result = [...baseTabs.value];
+
+    for (const custom of props.context.custom_tabs ?? []) {
+        const tab = { key: `record:${custom.key}`, label: custom.label, href: route('clients.records.index', [props.context.id, custom.key]), count: custom.count };
+        let index = result.findIndex((item) => item.key === custom.after);
+
+        if (index === -1) {
+            index = result.findIndex((item) => item.key === 'documents');
+        }
+
+        // Après l'onglet visé et les fiches déjà placées derrière lui.
+        let position = index + 1;
+
+        while (position < result.length && result[position]?.key.startsWith('record:')) {
+            position++;
+        }
+
+        result.splice(position, 0, tab);
+    }
+
+    return result;
+});
 
 const trail = computed<Breadcrumb[]>(() => [
     { label: 'Clients', href: route('clients.index') },

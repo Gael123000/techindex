@@ -50,7 +50,7 @@ const canCreate = props.context.permissions.edit && props.context.status === 'ac
         :context="context"
         active="services"
         title="Réseaux et services"
-        description="Internet, VPN, domaines, hébergement, cloud, messagerie, applications métiers, sauvegardes…"
+        description="VPN, domaines, hébergement, cloud, messagerie, applications métiers, sauvegardes… Les accès Internet sont dans l’onglet FAI."
         :breadcrumbs="[{ label: 'Services' }]"
     >
         <template #actions>

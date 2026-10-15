@@ -5,10 +5,12 @@ namespace App\Services\Attachments;
 use App\Models\Attachment;
 use App\Models\Certificate;
 use App\Models\Client;
+use App\Models\CustomRecord;
 use App\Models\Document;
 use App\Models\Equipment;
 use App\Models\FileFolder;
 use App\Models\Folder;
+use App\Models\InternetLink;
 use App\Models\License;
 use App\Models\Service;
 use App\Models\Site;
@@ -39,6 +41,8 @@ class FileExplorer
         'site' => [Site::class, 'name', 'Site', 'clients.sites.show'],
         'equipment' => [Equipment::class, 'name', 'Équipement', 'clients.equipment.show'],
         'service' => [Service::class, 'name', 'Service', 'clients.services.show'],
+        'internet_link' => [InternetLink::class, 'name', 'Lien Internet (FAI)', 'clients.internet-links.show'],
+        'custom_record' => [CustomRecord::class, 'title', 'Fiche', 'clients.records.show'],
         'document' => [Document::class, 'title', 'Document', 'clients.documents.show'],
         'license' => [License::class, 'name', 'Licence', 'clients.licenses.show'],
         'certificate' => [Certificate::class, 'name', 'Certificat', 'clients.certificates.show'],

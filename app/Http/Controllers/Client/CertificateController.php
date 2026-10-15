@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Client;
 
 use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CertificateRequest;
@@ -20,7 +21,7 @@ use Inertia\Response;
 
 class CertificateController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     public function index(Request $request, Client $client): Response
     {
@@ -70,6 +71,7 @@ class CertificateController extends Controller
         return Inertia::render('Certificates/Form', [
             'context' => $this->context($client, $request),
             'certificate' => null,
+            'extension' => $this->extensionForm('certificate', $client, null),
             ...$this->formOptions($client),
         ]);
     }
@@ -79,10 +81,11 @@ class CertificateController extends Controller
         Gate::authorize('contribute', $client);
 
         $certificate = DB::transaction(function () use ($request, $client): Certificate {
-            $certificate = new Certificate($request->safe()->except('equipment_ids'));
+            $certificate = new Certificate($request->safe()->except(['equipment_ids', 'fields']));
             $certificate->client()->associate($client);
             $certificate->save();
             $certificate->equipment()->sync($request->input('equipment_ids', []));
+            $this->saveExtension('certificate', $certificate, $client, $request->validated(), true);
 
             return $certificate;
         });
@@ -104,6 +107,7 @@ class CertificateController extends Controller
                 'status_label' => $certificate->status->label(),
             ],
             'history' => $this->historyFor($certificate, $request->user()),
+            'extension' => $this->extensionDisplay('certificate', $client, $certificate, ['type' => $certificate->type->value, 'status' => $certificate->status->value]),
             'warnDays' => (int) config('techindex.alerts.certificate_days'),
             'can' => [
                 'update' => Gate::allows('update', $certificate),
@@ -119,6 +123,7 @@ class CertificateController extends Controller
         return Inertia::render('Certificates/Form', [
             'context' => $this->context($client, $request),
             'certificate' => [...$certificate->toArray(), 'equipment_ids' => $certificate->equipment()->pluck('equipment.id')],
+            'extension' => $this->extensionForm('certificate', $client, $certificate),
             ...$this->formOptions($client),
         ]);
     }
@@ -127,8 +132,9 @@ class CertificateController extends Controller
     {
         Gate::authorize('update', $certificate);
 
-        DB::transaction(function () use ($request, $certificate): void {
-            $certificate->fill($request->safe()->except('equipment_ids'));
+        DB::transaction(function () use ($request, $client, $certificate): void {
+            $certificate->fill($request->safe()->except(['equipment_ids', 'fields']));
+            $this->saveExtension('certificate', $certificate, $client, $request->validated(), false);
             $before = $certificate->equipment()->pluck('name')->sort()->implode(', ');
             $certificate->equipment()->sync($request->input('equipment_ids', []));
             $certificate->addAuditChange('equipment', $before ?: null, $certificate->equipment()->pluck('name')->sort()->implode(', ') ?: null);

@@ -6,6 +6,7 @@ use App\Enums\AccessType;
 use App\Enums\ClientPermission;
 use App\Enums\ServiceCategory;
 use App\Enums\ServiceStatus;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ServiceRequest;
@@ -23,7 +24,7 @@ use Inertia\Response;
 
 class ServiceController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     public function __construct(private readonly TagResolver $tags) {}
 
@@ -76,7 +77,8 @@ class ServiceController extends Controller
         return Inertia::render('Services/Form', [
             'context' => $this->context($client, $request),
             'service' => null,
-            'defaultCategory' => ServiceCategory::tryFrom((string) $request->query('category'))?->value,
+            'extension' => $this->extensionForm('service', $client, null),
+            'defaultCategory' => collect(ServiceCategory::selectableDefinitions())->firstWhere('value', (string) $request->query('category'))['value'] ?? null,
             ...$this->formOptions($client),
         ]);
     }
@@ -91,6 +93,7 @@ class ServiceController extends Controller
             $service->save();
             $service->equipment()->sync($request->input('equipment_ids', []));
             $service->tags()->sync($this->tags->idsFor($request->input('tags')));
+            $this->saveExtension('service', $service, $client, $request->validated(), true);
 
             return $service;
         });
@@ -134,10 +137,11 @@ class ServiceController extends Controller
                 'editor' => $service->editor?->only(['id', 'name']),
             ],
             'definition' => collect(ServiceCategory::definitions())->firstWhere('value', $service->category->value),
-            'credentials' => $this->presentCredentials($service->credentials()->orderBy('label')->get(), $client, $user),
+            'credentials' => $this->presentCredentials($service->credentials()->with(['equipment:id,name', 'service:id,name', 'internetLink:id,name'])->orderBy('label')->get(), $client, $user),
             'accessTypes' => AccessType::options(),
             'attachments' => $this->attachmentsFor($service, $client, $user),
             'history' => $this->historyFor($service, $user),
+            'extension' => $this->extensionDisplay('service', $client, $service, ['category' => $service->category->value, 'status' => $service->status->value]),
             'can' => [
                 'update' => Gate::allows('update', $service),
                 'delete' => Gate::allows('delete', $service),
@@ -163,7 +167,8 @@ class ServiceController extends Controller
                 'tags' => $service->tags()->pluck('name'),
             ],
             'defaultCategory' => null,
-            ...$this->formOptions($client),
+            'extension' => $this->extensionForm('service', $client, $service),
+            ...$this->formOptions($client, $service),
         ]);
     }
 
@@ -171,8 +176,9 @@ class ServiceController extends Controller
     {
         Gate::authorize('update', $service);
 
-        DB::transaction(function () use ($request, $service): void {
+        DB::transaction(function () use ($request, $client, $service): void {
             $service->fill($this->attributes($request));
+            $this->saveExtension('service', $service, $client, $request->validated(), false);
 
             $before = $service->equipment()->pluck('name')->sort()->implode(', ');
             $service->equipment()->sync($request->input('equipment_ids', []));
@@ -212,7 +218,7 @@ class ServiceController extends Controller
     private function attributes(ServiceRequest $request): array
     {
         $category = ServiceCategory::from($request->input('category'));
-        $data = $request->safe()->except(['equipment_ids', 'tags', 'details']);
+        $data = $request->safe()->except(['equipment_ids', 'tags', 'details', 'fields']);
         $details = $category->normalizeDetails($request->input('details'));
         $data['details'] = $details === [] ? null : $details;
 
@@ -222,10 +228,10 @@ class ServiceController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function formOptions(Client $client): array
+    private function formOptions(Client $client, ?Service $service = null): array
     {
         return [
-            'categories' => ServiceCategory::definitions(),
+            'categories' => ServiceCategory::selectableDefinitions($service?->category),
             'statuses' => ServiceStatus::options(),
             'sites' => $this->siteOptions($client),
             'equipment' => $this->equipmentOptions($client),

@@ -5,12 +5,15 @@ namespace App\Http\Requests;
 use App\Enums\BillingPeriod;
 use App\Enums\LicenseKind;
 use App\Enums\LicenseStatus;
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class LicenseRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         return true;
@@ -44,6 +47,16 @@ class LicenseRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:20000'],
             'equipment_ids' => ['nullable', 'array', 'max:500'],
             'equipment_ids.*' => ['integer', Rule::exists('equipment', 'id')->where('client_id', $client->id)],
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('license', $this->route('license')),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return $this->extensionAttributes('license');
     }
 }

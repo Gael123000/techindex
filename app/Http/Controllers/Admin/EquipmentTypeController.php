@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\EquipmentType;
+use App\Services\Records\SystemRecordTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -18,8 +19,20 @@ class EquipmentTypeController extends Controller
     {
         Gate::authorize('manage-settings');
 
+        // Champs ajoutés à la fiche « Équipements » affichés seulement pour certains types.
+        $fieldCounts = [];
+
+        foreach (SystemRecordTypes::type('equipment')?->fields()->get() ?? [] as $field) {
+            if (($field->visibility['field'] ?? null) === 'equipment_type_id' && ($field->visibility['operator'] ?? null) === 'equals') {
+                foreach ((array) ($field->visibility['value'] ?? []) as $typeId) {
+                    $fieldCounts[(int) $typeId] = ($fieldCounts[(int) $typeId] ?? 0) + 1;
+                }
+            }
+        }
+
         return Inertia::render('Admin/EquipmentTypes/Index', [
-            'types' => EquipmentType::query()->withCount(['equipment', 'customFields'])->orderBy('sort_order')->orderBy('name')->get(),
+            'types' => EquipmentType::query()->withCount('equipment')->orderBy('sort_order')->orderBy('name')->get()
+                ->map(fn (EquipmentType $type): array => [...$type->toArray(), 'fields_count' => $fieldCounts[$type->id] ?? 0]),
             'icons' => EquipmentType::ICONS,
         ]);
     }

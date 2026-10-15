@@ -100,6 +100,14 @@ class Document extends Model
     }
 
     /**
+     * @return BelongsToMany<InternetLink, $this>
+     */
+    public function internetLinks(): BelongsToMany
+    {
+        return $this->belongsToMany(InternetLink::class);
+    }
+
+    /**
      * @return MorphMany<Attachment, $this>
      */
     public function attachments(): MorphMany

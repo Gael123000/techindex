@@ -7,12 +7,13 @@ import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TagInput from '@/components/TagInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option, TagRef } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordValue, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -44,6 +45,8 @@ const props = defineProps<{
     defaults: { reference: string; account_manager_id: number; country: string } | null;
     managers: Option<number>[];
     tags: TagRef[];
+    /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null;
 }>();
 
 const form = useForm({
@@ -63,6 +66,7 @@ const form = useForm({
     tags: props.client?.tags ?? ([] as string[]),
     logo: null as File | null,
     remove_logo: false,
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 const logoPreview = ref<string | null>(props.client?.logo_url ?? null);
@@ -75,12 +79,17 @@ function onLogo(event: Event): void {
     logoPreview.value = file ? URL.createObjectURL(file) : (props.client?.logo_url ?? null);
 }
 
+// En multipart, une liste vide n'est pas transmise : elle est envoyée vide pour être effacée.
+function multipartFields(fields: Record<string, RecordValue>): Record<string, RecordValue> {
+    return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, Array.isArray(value) && value.length === 0 ? '' : value]));
+}
+
 function submit(): void {
     if (props.client) {
         // Envoi multipart : la méthode PUT est simulée (_method).
-        form.transform((data) => ({ ...data, _method: 'put' })).post(route('clients.update', props.client.id), { forceFormData: true });
+        form.transform((data) => ({ ...data, fields: multipartFields(data.fields), _method: 'put' })).post(route('clients.update', props.client.id), { forceFormData: true });
     } else {
-        form.post(route('clients.store'), { forceFormData: true });
+        form.transform((data) => ({ ...data, fields: multipartFields(data.fields) })).post(route('clients.store'), { forceFormData: true });
     }
 }
 </script>
@@ -186,6 +195,8 @@ function submit(): void {
                 </template>
             </FormField>
         </FormSection>
+
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" id-prefix="extra" />
 
         <div class="flex flex-wrap justify-end gap-2">
             <Link :href="client ? route('clients.show', client.id) : route('clients.index')" class="btn-secondary">Annuler</Link>

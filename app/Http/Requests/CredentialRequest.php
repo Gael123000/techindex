@@ -38,6 +38,7 @@ class CredentialRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:5000'],
             'equipment_id' => ['nullable', 'integer', Rule::exists('equipment', 'id')->where('client_id', $client->id)],
             'service_id' => ['nullable', 'integer', Rule::exists('services', 'id')->where('client_id', $client->id)],
+            'internet_link_id' => ['nullable', 'integer', Rule::exists('internet_links', 'id')->where('client_id', $client->id)],
             // Rangement dans le gestionnaire de mots de passe (dossier du même client).
             'folder_id' => ['nullable', 'integer', Rule::exists('vault_folders', 'id')->where('client_id', $client->id)],
         ];

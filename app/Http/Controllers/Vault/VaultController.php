@@ -46,7 +46,7 @@ class VaultController extends Controller
         $results = $term === '' ? [] : Credential::query()
             ->visibleTo($user)
             ->where(fn (Builder $query) => $this->matching($query, $term))
-            ->with(['client:id,name', 'equipment:id,name', 'service:id,name', 'folder:id,name'])
+            ->with(['client:id,name', 'equipment:id,name', 'service:id,name', 'internetLink:id,name', 'folder:id,name'])
             ->orderBy('label')
             ->limit(100)
             ->get()
@@ -94,7 +94,7 @@ class VaultController extends Controller
         $credentials = $client->credentials()
             ->tap($constrain)
             ->when($term !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $this->matching($query, $term)))
-            ->with(['equipment:id,name', 'service:id,name', 'folder:id,name'])
+            ->with(['equipment:id,name', 'service:id,name', 'internetLink:id,name', 'folder:id,name'])
             ->orderBy('label')
             ->paginate(100)
             ->withQueryString();

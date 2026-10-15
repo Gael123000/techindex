@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use Illuminate\Foundation\Http\FormRequest;
 
 class SiteRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         return true;
@@ -27,6 +30,16 @@ class SiteRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:50'],
             'access_instructions' => ['nullable', 'string', 'max:5000'],
             'notes' => ['nullable', 'string', 'max:20000'],
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('site', $this->route('site')),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return $this->extensionAttributes('site');
     }
 }

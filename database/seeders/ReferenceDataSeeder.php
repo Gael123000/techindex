@@ -4,12 +4,15 @@ namespace Database\Seeders;
 
 use App\Models\DocumentCategory;
 use App\Models\EquipmentType;
+use App\Services\Records\SystemRecordTypes;
+use App\Support\IspCatalog;
 use Illuminate\Database\Seeder;
 
 /**
  * Données de référence nécessaires au fonctionnement (types d'équipements,
- * catégories de documentation). Idempotent : peut être relancé à chaque
- * installation ou mise à jour sans dupliquer ni écraser les personnalisations.
+ * catégories de documentation, catalogue des FAI). Idempotent : peut être
+ * relancé à chaque installation ou mise à jour sans dupliquer ni écraser les
+ * personnalisations.
  */
 class ReferenceDataSeeder extends Seeder
 {
@@ -57,5 +60,11 @@ class ReferenceDataSeeder extends Seeder
                 ['name' => $name, 'sort_order' => ($index + 1) * 10],
             );
         }
+
+        // Catalogue des fournisseurs d'accès à Internet (ajouts seulement).
+        IspCatalog::sync();
+
+        // Fiches par défaut du constructeur de fiches (ajouts seulement).
+        SystemRecordTypes::sync();
     }
 }

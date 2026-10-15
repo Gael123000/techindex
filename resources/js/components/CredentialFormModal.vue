@@ -16,7 +16,7 @@ import TextInput from './TextInput.vue';
  * Création / modification d'un accès. Le champ secret est en écriture
  * seule : il n'est jamais prérempli avec la valeur existante.
  *
- * Le même formulaire sert sur les fiches (équipement, service, accès) et dans
+ * Le même formulaire sert sur les fiches (équipement, service, lien FAI, accès) et dans
  * le gestionnaire de mots de passe, où il propose en plus le dossier de rangement.
  */
 const props = defineProps<{
@@ -26,11 +26,13 @@ const props = defineProps<{
     types: Option[];
     equipment?: Option<number>[];
     services?: Option<number>[];
+    internetLinks?: Option<number>[];
     folders?: Option<number>[];
     canWriteSecrets: boolean;
     fixedEquipmentId?: number | null;
     fixedServiceId?: number | null;
-    defaults?: { equipment_id?: number | null; service_id?: number | null; folder_id?: number | null };
+    fixedInternetLinkId?: number | null;
+    defaults?: { equipment_id?: number | null; service_id?: number | null; internet_link_id?: number | null; folder_id?: number | null };
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -51,6 +53,7 @@ const form = useForm({
     notes: '',
     equipment_id: null as number | null,
     service_id: null as number | null,
+    internet_link_id: null as number | null,
     folder_id: null as number | null,
 });
 
@@ -79,6 +82,7 @@ watch(
         form.notes = c?.notes ?? '';
         form.equipment_id = c ? (c.equipment?.id ?? null) : (props.fixedEquipmentId ?? props.defaults?.equipment_id ?? null);
         form.service_id = c ? (c.service?.id ?? null) : (props.fixedServiceId ?? props.defaults?.service_id ?? null);
+        form.internet_link_id = c ? (c.internet_link?.id ?? null) : (props.fixedInternetLinkId ?? props.defaults?.internet_link_id ?? null);
         form.folder_id = c ? (c.folder?.id ?? null) : (props.defaults?.folder_id ?? null);
         showSecret.value = false;
         showGenerator.value = false;
@@ -239,6 +243,11 @@ function submit(): void {
             <FormField v-if="services && fixedServiceId === undefined" id="cred_service" label="Service" :error="form.errors.service_id">
                 <template #default="{ describedBy, invalid }">
                     <SelectInput id="cred_service" v-model="form.service_id" :options="services" placeholder="— Aucun —" :described-by="describedBy" :invalid="invalid" />
+                </template>
+            </FormField>
+            <FormField v-if="internetLinks && internetLinks.length && fixedInternetLinkId === undefined" id="cred_internet_link" label="Lien Internet (FAI)" :error="form.errors.internet_link_id">
+                <template #default="{ describedBy, invalid }">
+                    <SelectInput id="cred_internet_link" v-model="form.internet_link_id" :options="internetLinks" placeholder="— Aucun —" :described-by="describedBy" :invalid="invalid" />
                 </template>
             </FormField>
             <FormField

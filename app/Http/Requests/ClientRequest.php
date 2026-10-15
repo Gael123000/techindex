@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ClientRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         // Contrôle effectué dans le contrôleur (politique ClientPolicy).
@@ -40,6 +43,8 @@ class ClientRequest extends FormRequest
             'tags.*' => ['string', 'max:60'],
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:'.config('techindex.logos.max_size_kb'), 'dimensions:max_width=4000,max_height=4000'],
             'remove_logo' => ['nullable', 'boolean'],
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('client', $this->route('client')),
         ];
     }
 
@@ -48,5 +53,13 @@ class ClientRequest extends FormRequest
         return [
             'reference.regex' => 'La référence ne peut contenir que des lettres, chiffres, points, tirets et tirets bas.',
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return $this->extensionAttributes('client');
     }
 }

@@ -150,6 +150,16 @@ class Client extends Model
     }
 
     /**
+     * Liens d'accès à Internet (FAI).
+     *
+     * @return HasMany<InternetLink, $this>
+     */
+    public function internetLinks(): HasMany
+    {
+        return $this->hasMany(InternetLink::class);
+    }
+
+    /**
      * @return HasMany<Service, $this>
      */
     public function services(): HasMany
@@ -227,6 +237,30 @@ class Client extends Model
     public function fileFolders(): HasMany
     {
         return $this->hasMany(FileFolder::class);
+    }
+
+    /**
+     * Enregistrements des fiches créées avec le constructeur.
+     *
+     * @return HasMany<CustomRecord, $this>
+     */
+    public function customRecords(): HasMany
+    {
+        return $this->hasMany(CustomRecord::class);
+    }
+
+    /**
+     * Liaison des routes imbriquées (scopeBindings) : les types de fiches
+     * sont communs à tous les clients et ne dépendent donc pas du client ;
+     * tout le reste est recherché parmi les éléments du client.
+     */
+    public function resolveChildRouteBinding($childType, $value, $field)
+    {
+        if ($childType === 'recordType') {
+            return RecordType::query()->where($field ?? 'key', $value)->first();
+        }
+
+        return parent::resolveChildRouteBinding($childType, $value, $field);
     }
 
     public function hasLogo(): bool

@@ -9,11 +9,16 @@ use App\Enums\CertificateType;
 use App\Enums\DocumentStatus;
 use App\Enums\EquipmentLinkType;
 use App\Enums\EquipmentStatus;
+use App\Enums\InternetConnectionMode;
+use App\Enums\InternetLinkRole;
+use App\Enums\InternetLinkStatus;
+use App\Enums\InternetTechnology;
 use App\Enums\LicenseKind;
 use App\Enums\LicenseStatus;
 use App\Enums\RecordStatus;
 use App\Enums\ServiceCategory;
 use App\Enums\ServiceStatus;
+use App\Enums\SubnetPurpose;
 use App\Enums\UserRole;
 use App\Models\Certificate;
 use App\Models\Client;
@@ -26,6 +31,8 @@ use App\Models\EquipmentLink;
 use App\Models\EquipmentType;
 use App\Models\FileFolder;
 use App\Models\Folder;
+use App\Models\InternetLink;
+use App\Models\Isp;
 use App\Models\License;
 use App\Models\Service;
 use App\Models\Site;
@@ -248,10 +255,32 @@ class DemoSeeder extends Seeder
             $link->save();
         }
 
+        // Accès Internet (FAI) : fibre principale chez un opérateur du catalogue,
+        // secours 4G chez un opérateur fictif. Adresses publiques de documentation (RFC 5737).
+        $operator = Isp::query()->where('slug', ['orange-business', 'sfr-business', 'bouygues-telecom'][$index % 3])->first();
+        $block = 8 * ($index + 1);
+        $internet = $this->internetLink($client, $sites[0], [
+            'isp_id' => $operator?->id, 'operator_name' => $operator === null ? 'Opérateur Fictif Télécom' : null,
+            'name' => 'Fibre principale', 'role' => InternetLinkRole::Primary, 'technology' => InternetTechnology::Ftto,
+            'download_mbps' => 1000, 'upload_mbps' => 1000, 'guaranteed_mbps' => 1000,
+            'customer_number' => 'CLI-'.strtoupper(Str::random(8)), 'contract_reference' => 'CT-'.strtoupper(Str::random(6)),
+            'line_reference' => 'FTTO-DEMO-'.random_int(100000, 999999), 'connection_mode' => InternetConnectionMode::Static,
+            'public_ips' => '203.0.113.'.$block.'/29', 'wan_gateway' => '203.0.113.'.($block + 1), 'gtr' => '4 h ouvrées',
+            'commissioned_at' => $today->copy()->subYears(2)->toDateString(), 'commitment_ends_at' => $today->copy()->addMonths(14)->toDateString(),
+            'monthly_cost' => 290 + 20 * $index, 'notes' => 'Lien de démonstration : références fictives.',
+        ], [$fw]);
+        $this->internetLink($client, $sites[0], [
+            'operator_name' => 'Opérateur Fictif Mobile', 'name' => 'Secours 4G', 'role' => InternetLinkRole::Backup,
+            'technology' => InternetTechnology::Mobile, 'download_mbps' => 150, 'upload_mbps' => 50,
+            'connection_mode' => InternetConnectionMode::Dhcp, 'monthly_cost' => 35,
+        ], [$fw]);
+
+        $wan = new Subnet(['site_id' => $sites[0]->id, 'purpose' => SubnetPurpose::Wan, 'internet_link_id' => $internet->id, 'name' => 'WAN fibre',
+            'cidr' => '203.0.113.'.$block.'/29', 'gateway' => '203.0.113.'.($block + 1), 'description' => 'Bloc d\'adresses publiques fourni par l\'opérateur.']);
+        $wan->client()->associate($client);
+        $wan->save();
+
         // Services.
-        $internet = $this->service($client, $sites[0], ServiceCategory::Internet, 'Fibre principale', 'Opérateur Fictif Télécom',
-            ['technology' => 'Fibre dédiée (FTTO)', 'bandwidth_down' => '1 Gbit/s', 'bandwidth_up' => '1 Gbit/s', 'public_ips' => '203.0.113.'.(10 + $index), 'sla' => 'GTR 4 h'],
-            $today->copy()->addMonths(14), [$fw]);
         $this->service($client, null, ServiceCategory::Domain, $d['domain'], 'Registrar Exemple',
             ['domain_name' => $d['domain'], 'dns_hosting' => 'Registrar Exemple', 'nameservers' => "ns1.registrar.example\nns2.registrar.example", 'auto_renewal' => false],
             $today->copy()->addDays(20 + $index * 15), []);
@@ -303,7 +332,7 @@ class DemoSeeder extends Seeder
         }
 
         $portal = new Credential(['label' => 'Portail opérateur', 'access_type' => AccessType::Web, 'username' => 'client-'.$d['reference'],
-            'url' => 'https://espace-client.operateur.example', 'service_id' => $internet->id, 'folder_id' => $suppliers->id]);
+            'url' => 'https://espace-client.operateur.example', 'internet_link_id' => $internet->id, 'folder_id' => $suppliers->id]);
         $portal->client()->associate($client);
         $this->secrets->apply($portal, Str::password(18));
         $portal->save();
@@ -311,17 +340,18 @@ class DemoSeeder extends Seeder
         // Documentation.
         $category = fn (string $slug): ?int => DocumentCategory::query()->where('slug', $slug)->value('id');
         $documents = [
-            ['Procédure de restauration d\'une machine virtuelle', 'sauvegarde-restauration', $this->restoreProcedure(), [$host, $nas], [$backup], 200],
-            ['Redémarrage planifié de l\'infrastructure', 'exploitation', $this->restartProcedure(), [$host, $dc, $files], [], 400],
-            ['Architecture réseau', 'architecture', $this->architecture($d['net']), [$fw, $switch], [$internet], null],
+            ['Procédure de restauration d\'une machine virtuelle', 'sauvegarde-restauration', $this->restoreProcedure(), [$host, $nas], [$backup], [], 200],
+            ['Redémarrage planifié de l\'infrastructure', 'exploitation', $this->restartProcedure(), [$host, $dc, $files], [], [], 400],
+            ['Architecture réseau', 'architecture', $this->architecture($d['net']), [$fw, $switch], [], [$internet], null],
         ];
 
-        foreach ($documents as [$title, $slug, $html, $equipmentLinks, $serviceLinks, $verifiedDaysAgo]) {
+        foreach ($documents as [$title, $slug, $html, $equipmentLinks, $serviceLinks, $internetLinks, $verifiedDaysAgo]) {
             $document = $this->documents->save(new Document, $client, [
                 'title' => $title, 'content' => $html, 'category_id' => $category($slug), 'status' => DocumentStatus::Published->value,
                 'owner_id' => $users['technician']->id, 'review_interval_days' => 180,
                 'equipment_ids' => array_map(fn (Equipment $e): int => $e->id, $equipmentLinks),
                 'service_ids' => array_map(fn (Service $s): int => $s->id, $serviceLinks),
+                'internet_link_ids' => array_map(fn (InternetLink $link): int => $link->id, $internetLinks),
                 'tags' => [],
             ], $users['technician']);
 
@@ -340,9 +370,23 @@ class DemoSeeder extends Seeder
         return $vlan;
     }
 
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  list<Equipment>  $equipment
+     */
+    private function internetLink(Client $client, Site $site, array $attributes, array $equipment): InternetLink
+    {
+        $link = new InternetLink(['site_id' => $site->id, 'status' => InternetLinkStatus::Active, ...$attributes]);
+        $link->client()->associate($client);
+        $link->save();
+        $link->equipment()->sync(array_map(fn (Equipment $e): int => $e->id, $equipment));
+
+        return $link;
+    }
+
     private function subnet(Client $client, Site $site, Vlan $vlan, string $name, string $cidr, string $gateway, bool $dhcp): Subnet
     {
-        $subnet = new Subnet(['site_id' => $site->id, 'vlan_id' => $vlan->id, 'name' => $name, 'cidr' => $cidr, 'gateway' => $gateway,
+        $subnet = new Subnet(['site_id' => $site->id, 'vlan_id' => $vlan->id, 'purpose' => SubnetPurpose::Lan, 'name' => $name, 'cidr' => $cidr, 'gateway' => $gateway,
             'dns_servers' => str_replace('.0/24', '.10', $cidr), 'dhcp_enabled' => $dhcp, 'dhcp_range' => $dhcp ? '.100 – .200' : null]);
         $subnet->client()->associate($client);
         $subnet->save();

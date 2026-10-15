@@ -7,6 +7,8 @@ use App\Models\Client;
 use App\Models\Credential;
 use App\Models\Document;
 use App\Models\Equipment;
+use App\Models\InternetLink;
+use App\Models\Isp;
 use App\Models\User;
 use App\Secrets\CredentialSecrets;
 use App\Services\Search\GlobalSearch;
@@ -139,5 +141,53 @@ class SearchTest extends CommittedDataTestCase
         $doc->save();
 
         $this->assertSame(0, collect(app(GlobalSearch::class)->search($reader, 'Zeta')['groups'])->sum('total'));
+    }
+
+    public function test_internet_links_are_found_by_operator_line_reference_and_public_ip(): void
+    {
+        foreach ([[$this->mine, 'Fibre siège', 'NDI-998877'], [$this->other, 'Fibre cachée', 'NDI-998800']] as [$client, $name, $line]) {
+            $link = new InternetLink([
+                'isp_id' => Isp::query()->where('slug', 'orange')->value('id'), 'name' => $name, 'role' => 'primary', 'status' => 'active',
+                'line_reference' => $line, 'public_ips' => '198.51.100.8/29',
+            ]);
+            $link->client()->associate($client);
+            $link->save();
+        }
+
+        foreach (['Orange', 'NDI-9988', '198.51.100'] as $term) {
+            $group = $this->group($this->results($term), 'internet_links');
+            $this->assertSame(1, $group['total'], "Recherche « {$term} »");
+            $this->assertSame('Fibre siège', $group['items'][0]['title']);
+            $this->assertNotNull($group['items'][0]['logo_url']);
+        }
+    }
+
+    public function test_instant_suggestions_respect_access_rights(): void
+    {
+        $response = $this->actingAs($this->user)->getJson('/search/suggest?q=PowerEdge')->assertOk();
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $this->assertStringNotContainsString('SRV-PARTAGE-SECRET', $response->getContent());
+        $response->assertJsonPath('groups.0.type', 'equipment')
+            ->assertJsonPath('groups.0.items.0.title', 'SRV-PARTAGE')
+            ->assertJsonCount(1, 'groups.0.items');
+
+        // Moins de deux caractères : aucune requête.
+        $this->actingAs($this->user)->getJson('/search/suggest?q=P')->assertOk()->assertJsonPath('groups', []);
+    }
+
+    public function test_instant_suggestions_are_limited_per_type(): void
+    {
+        Equipment::factory()->count(7)->for($this->mine)->sequence(fn ($sequence) => ['name' => 'POSTE-LOT-'.$sequence->index])->create();
+
+        $group = collect(app(GlobalSearch::class)->suggest($this->user, 'POSTE-LOT'))->firstWhere('type', 'equipment');
+
+        $this->assertCount(5, $group['items']);
+        $this->assertTrue($group['has_more']);
+    }
+
+    public function test_guests_get_no_suggestions(): void
+    {
+        $this->getJson('/search/suggest?q=PowerEdge')->assertUnauthorized();
     }
 }

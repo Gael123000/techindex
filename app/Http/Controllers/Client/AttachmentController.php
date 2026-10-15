@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Attachment;
 use App\Models\Certificate;
 use App\Models\Client;
+use App\Models\CustomRecord;
 use App\Models\Document;
 use App\Models\Equipment;
+use App\Models\InternetLink;
 use App\Models\License;
 use App\Models\Service;
 use App\Models\Site;
@@ -37,6 +39,8 @@ class AttachmentController extends Controller
         'site' => Site::class,
         'equipment' => Equipment::class,
         'service' => Service::class,
+        'internet_link' => InternetLink::class,
+        'custom_record' => CustomRecord::class,
         'document' => Document::class,
         'license' => License::class,
         'certificate' => Certificate::class,

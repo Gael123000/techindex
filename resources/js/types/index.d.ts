@@ -71,6 +71,8 @@ export interface ClientContext {
     logo_url: string | null;
     permissions: ClientPermissions;
     counts: Record<string, number>;
+    /** Onglets des fiches créées avec le constructeur. */
+    custom_tabs: Array<{ key: string; label: string; icon: string; after: string; count: number }>;
 }
 
 export interface TagRef {
@@ -113,6 +115,7 @@ export interface CredentialRow {
     updated_at: string | null;
     equipment: { id: number; name: string } | null;
     service: { id: number; name: string } | null;
+    internet_link?: { id: number; name: string } | null;
     folder?: { id: number; name: string } | null;
     reveal_url: string | null;
 }
@@ -204,17 +207,6 @@ export interface AuditEntry {
     created_at: string;
 }
 
-export interface CustomFieldDefinition {
-    id: number;
-    equipment_type_id: number | null;
-    key: string;
-    label: string;
-    type: 'text' | 'number' | 'date' | 'boolean' | 'select' | 'url';
-    options: string[] | null;
-    is_required: boolean;
-    help_text: string | null;
-}
-
 export interface ServiceFieldDefinition {
     key: string;
     label: string;
@@ -229,4 +221,116 @@ export interface ServiceCategoryDefinition {
     icon: string;
     provider_label: string;
     fields: ServiceFieldDefinition[];
+}
+
+/** Opérateur (FAI) du catalogue proposé dans un formulaire. */
+export interface IspOption {
+    value: number;
+    label: string;
+    logo_url: string | null;
+    active: boolean;
+}
+
+/** Lien d'accès à Internet d'un client (liste et fiche). */
+export interface InternetLinkSummary {
+    id: number;
+    name: string;
+    operator: string | null;
+    logo_url: string | null;
+    role: string;
+    role_label: string;
+    status: string;
+    status_label: string;
+    technology: string | null;
+    technology_label: string | null;
+    download_mbps: number | null;
+    upload_mbps: number | null;
+    bandwidth_label: string | null;
+    public_ips: string | null;
+    line_reference: string | null;
+    commitment_ends_at: string | null;
+    site: Ref | null;
+    tags: TagRef[];
+    equipment_count: number | null;
+    subnets_count: number | null;
+}
+
+/** Constructeur de fiches : section de la disposition. */
+export interface RecordSection {
+    key: string;
+    title: string;
+    description: string | null;
+    columns: number;
+}
+
+export interface RecordFieldCondition {
+    field: string;
+    operator: 'equals' | 'not_equals' | 'filled' | 'empty' | 'checked' | 'unchecked';
+    value?: string[];
+}
+
+export interface RecordFieldOptions {
+    choices?: string[];
+    target?: string;
+    min?: number | string;
+    max?: number | string;
+    max_length?: number;
+    unit?: string;
+    placeholder?: string;
+    default?: string | number | boolean;
+    rows?: number;
+    display?: 'select' | 'radio';
+}
+
+export interface RecordFieldDefinition {
+    id: number;
+    key: string;
+    column_name: string;
+    label: string;
+    type: string;
+    type_label: string;
+    options: RecordFieldOptions;
+    help_text: string | null;
+    is_required: boolean;
+    is_unique: boolean;
+    is_title: boolean;
+    in_list: boolean;
+    is_searchable: boolean;
+    section: string | null;
+    width: '1' | '2' | 'full';
+    sort_order: number;
+    visibility: RecordFieldCondition | null;
+}
+
+export type RecordValue = string | number | boolean | string[] | null;
+
+/** Formulaire d'une fiche : sections, champs et listes d'options. */
+export interface RecordFormDefinition {
+    sections: RecordSection[];
+    fields: RecordFieldDefinition[];
+    references: Record<string, Option<number>[]>;
+    users: Option<number>[];
+    values?: Record<string, RecordValue>;
+    defaults?: Record<string, RecordValue>;
+}
+
+/** Type de champ proposé dans le constructeur. */
+export interface FieldTypeDefinition {
+    value: string;
+    label: string;
+    description: string;
+    icon: string;
+    sql: string;
+    storage: string;
+}
+
+/** Champ d'origine d'une fiche par défaut utilisable dans une condition d'affichage. */
+export interface ConditionSource {
+    label: string;
+    options: Option[];
+}
+
+/** Valeurs présentées sur une fiche. */
+export interface RecordPresentedSection extends RecordSection {
+    fields: Array<{ key: string; label: string; type: string; width: string; display: string | null; html: string | null; url: string | null }>;
 }

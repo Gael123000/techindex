@@ -6,9 +6,10 @@ import ClientHeader from '@/components/ClientHeader.vue';
 import DeleteResource from '@/components/DeleteResource.vue';
 import DynamicIcon from '@/components/DynamicIcon.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { AuditEntry, ClientContext } from '@/types';
+import type { AuditEntry, ClientContext, RecordPresentedSection } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -42,6 +43,8 @@ const props = defineProps<{
     services: Array<{ id: number; name: string; provider: string | null; status: string }>;
     history: AuditEntry[];
     can: { update: boolean; delete: boolean };
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
 }>();
 
 function toggleArchive(): void {
@@ -88,6 +91,8 @@ function toggleArchive(): void {
                 </div>
                 <div v-if="site.notes" class="mt-4 rounded-md bg-slate-50 p-3 text-sm whitespace-pre-line text-slate-700">{{ site.notes }}</div>
             </section>
+
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
 
             <section class="card" aria-labelledby="site-equipment">
                 <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">

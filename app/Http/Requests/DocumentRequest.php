@@ -3,12 +3,15 @@
 namespace App\Http\Requests;
 
 use App\Enums\DocumentStatus;
+use App\Http\Requests\Concerns\ValidatesRecordExtension;
 use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class DocumentRequest extends FormRequest
 {
+    use ValidatesRecordExtension;
+
     public function authorize(): bool
     {
         return true;
@@ -34,8 +37,20 @@ class DocumentRequest extends FormRequest
             'equipment_ids.*' => ['integer', Rule::exists('equipment', 'id')->where('client_id', $client->id)],
             'service_ids' => ['nullable', 'array', 'max:500'],
             'service_ids.*' => ['integer', Rule::exists('services', 'id')->where('client_id', $client->id)],
+            'internet_link_ids' => ['nullable', 'array', 'max:100'],
+            'internet_link_ids.*' => ['integer', Rule::exists('internet_links', 'id')->where('client_id', $client->id)],
             'tags' => ['nullable', 'array', 'max:20'],
             'tags.*' => ['string', 'max:60'],
+            // Champs ajoutés avec le constructeur de fiches (fields[...]).
+            ...$this->extensionRules('document', $this->route('document')),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return $this->extensionAttributes('document');
     }
 }

@@ -19,6 +19,7 @@ import {
     Tags,
     UserRound,
     Users,
+    Wifi,
     X,
 } from '@lucide/vue';
 import type { Component } from 'vue';
@@ -26,6 +27,7 @@ import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 import AppLogo from '@/components/AppLogo.vue';
 import FlashMessages from '@/components/FlashMessages.vue';
+import GlobalSearchBox from '@/components/GlobalSearchBox.vue';
 import PasswordConfirmModal from '@/components/PasswordConfirmModal.vue';
 
 interface NavItem {
@@ -40,7 +42,6 @@ const page = usePage();
 const auth = computed(() => page.props.auth);
 const sidebarOpen = ref(false);
 const userMenuOpen = ref(false);
-const searchQuery = ref(typeof page.props.query === 'string' ? page.props.query : '');
 
 const mainNav = computed<NavItem[]>(() => {
     // Dépendance explicite à l'URL : route().current() n'est pas réactif.
@@ -78,8 +79,9 @@ const adminNav = computed<NavItem[]>(() => {
     if (auth.value?.can.manage_settings) {
         items.push(
             { label: 'Types d\'équipements', href: route('admin.equipment-types.index'), icon: Shapes, active: route().current('admin.equipment-types.*') },
-            { label: 'Champs personnalisés', href: route('admin.custom-fields.index'), icon: SlidersHorizontal, active: route().current('admin.custom-fields.*') },
+            { label: 'Fiches et champs', href: route('admin.record-types.index'), icon: SlidersHorizontal, active: route().current('admin.record-types.*') },
             { label: 'Catégories de documents', href: route('admin.document-categories.index'), icon: FolderCog, active: route().current('admin.document-categories.*') },
+            { label: 'Fournisseurs d\'accès', href: route('admin.isps.index'), icon: Wifi, active: route().current('admin.isps.*') },
             { label: 'Étiquettes', href: route('admin.tags.index'), icon: Tags, active: route().current('admin.tags.*') },
         );
     }
@@ -96,12 +98,6 @@ const adminNav = computed<NavItem[]>(() => {
 
     return items;
 });
-
-function submitSearch(): void {
-    if (searchQuery.value.trim().length > 0) {
-        router.get(route('search'), { q: searchQuery.value.trim() });
-    }
-}
 
 function logout(): void {
     router.post(route('logout'));
@@ -199,20 +195,9 @@ watch(
                     <span class="sr-only">Ouvrir le menu</span>
                 </button>
 
-                <form role="search" class="flex-1" @submit.prevent="submitSearch">
-                    <label for="global-search" class="sr-only">Rechercher dans TechIndex</label>
-                    <div class="relative max-w-xl">
-                        <Search class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-                        <input
-                            id="global-search"
-                            v-model="searchQuery"
-                            type="search"
-                            class="form-input pl-9"
-                            placeholder="Client, équipement, IP, n° de série, document…"
-                            autocomplete="off"
-                        />
-                    </div>
-                </form>
+                <div class="flex-1">
+                    <GlobalSearchBox />
+                </div>
 
                 <div class="relative">
                     <button

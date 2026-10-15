@@ -154,7 +154,7 @@ class ClientAccessTest extends TestCase
     {
         $manager = User::factory()->manager()->create();
 
-        foreach (['/admin/users', '/admin/users/create', '/admin/equipment-types', '/admin/custom-fields', '/admin/document-categories', '/admin/tags'] as $url) {
+        foreach (['/admin/users', '/admin/users/create', '/admin/equipment-types', '/admin/record-types', '/admin/isps', '/admin/document-categories', '/admin/tags'] as $url) {
             $this->actingAs($manager)->get($url)->assertForbidden();
         }
 

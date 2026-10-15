@@ -10,10 +10,11 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import DeleteResource from '@/components/DeleteResource.vue';
 import ExpiryBadge from '@/components/ExpiryBadge.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import TagList from '@/components/TagList.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
-import type { AttachmentsPayload, AuditEntry, ClientContext, TagRef } from '@/types';
+import type { AttachmentsPayload, AuditEntry, ClientContext, RecordPresentedSection, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -64,6 +65,8 @@ const props = defineProps<{
     attachments: AttachmentsPayload;
     history: AuditEntry[];
     can: { update: boolean; archive: boolean; restore: boolean; delete: boolean; export: boolean };
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
 }>();
 
 const confirmArchive = ref(false);
@@ -156,6 +159,8 @@ const address = [props.client.address_line1, props.client.address_line2, [props.
                 </dl>
                 <div v-if="client.notes" class="mt-4 rounded-md bg-slate-50 p-3 text-sm whitespace-pre-line text-slate-700">{{ client.notes }}</div>
             </section>
+
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
 
             <section class="card" aria-labelledby="contacts-title">
                 <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">

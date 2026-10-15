@@ -10,11 +10,12 @@ import CredentialsTable from '@/components/CredentialsTable.vue';
 import DeleteResource from '@/components/DeleteResource.vue';
 import ExpiryBadge from '@/components/ExpiryBadge.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import TagList from '@/components/TagList.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDate, formatDateTime } from '@/lib/format';
-import type { AttachmentsPayload, AuditEntry, ClientContext, CredentialRow, Option, ServiceCategoryDefinition, TagRef } from '@/types';
+import type { AttachmentsPayload, AuditEntry, ClientContext, CredentialRow, Option, RecordPresentedSection, ServiceCategoryDefinition, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -51,6 +52,8 @@ const props = defineProps<{
     attachments: AttachmentsPayload;
     history: AuditEntry[];
     can: { update: boolean; delete: boolean; write_secrets: boolean };
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
 }>();
 
 const confirmArchive = ref(false);
@@ -146,6 +149,8 @@ function archive(): void {
                     Modifié le {{ formatDateTime(service.updated_at) }}<template v-if="service.editor"> par {{ service.editor.name }}</template>
                 </p>
             </section>
+
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
 
             <CredentialsTable
                 :client-id="context.id"

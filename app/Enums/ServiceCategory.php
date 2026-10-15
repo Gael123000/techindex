@@ -203,4 +203,19 @@ enum ServiceCategory: string
             'fields' => $case->fields(),
         ], self::cases());
     }
+
+    /**
+     * Catégories proposées à la saisie. Les accès Internet se gèrent dans
+     * l'onglet FAI : « Connexion Internet » ne reste proposée que pour un
+     * service qui l'a déjà.
+     *
+     * @return list<array{value: string, label: string, icon: string, provider_label: string, fields: list<array<string, mixed>>}>
+     */
+    public static function selectableDefinitions(?self $current = null): array
+    {
+        return array_values(array_filter(
+            self::definitions(),
+            static fn (array $definition): bool => $definition['value'] !== self::Internet->value || $current === self::Internet,
+        ));
+    }
 }

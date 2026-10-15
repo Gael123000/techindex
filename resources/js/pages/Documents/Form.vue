@@ -5,12 +5,13 @@ import CheckboxList from '@/components/CheckboxList.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import RichTextEditor from '@/components/RichTextEditor.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TagInput from '@/components/TagInput.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option, TagRef } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordValue, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -24,6 +25,7 @@ interface DocumentData {
     review_interval_days: number | null;
     equipment_ids: number[];
     service_ids: number[];
+    internet_link_ids: number[];
     tags: string[];
     current_version: number;
 }
@@ -31,13 +33,16 @@ interface DocumentData {
 const props = defineProps<{
     context: ClientContext;
     document: DocumentData | null;
-    defaults: { owner_id: number; review_interval_days: number; equipment_ids: number[]; service_ids: number[] } | null;
+    defaults: { owner_id: number; review_interval_days: number; equipment_ids: number[]; service_ids: number[]; internet_link_ids: number[] } | null;
     categories: Option<number>[];
     statuses: Option[];
     owners: Option<number>[];
     equipment: Option<number>[];
     services: Option<number>[];
+    internetLinks: Option<number>[];
     tags: TagRef[];
+    /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null;
 }>();
 
 const d = props.document;
@@ -52,7 +57,9 @@ const form = useForm({
     change_summary: '',
     equipment_ids: d?.equipment_ids ?? props.defaults?.equipment_ids ?? ([] as number[]),
     service_ids: d?.service_ids ?? props.defaults?.service_ids ?? ([] as number[]),
+    internet_link_ids: d?.internet_link_ids ?? props.defaults?.internet_link_ids ?? ([] as number[]),
     tags: d?.tags ?? ([] as string[]),
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 function submit(): void {
@@ -119,7 +126,7 @@ function submit(): void {
             </FormField>
         </FormSection>
 
-        <FormSection title="Éléments concernés" description="Équipements et services auxquels la fiche s'applique.">
+        <FormSection title="Éléments concernés" description="Équipements, services et liens Internet auxquels la fiche s'applique.">
             <div>
                 <p class="mb-1 text-sm font-medium text-slate-700">Équipements</p>
                 <CheckboxList id="equipment_ids" v-model="form.equipment_ids" :options="equipment" />
@@ -128,7 +135,13 @@ function submit(): void {
                 <p class="mb-1 text-sm font-medium text-slate-700">Services</p>
                 <CheckboxList id="service_ids" v-model="form.service_ids" :options="services" />
             </div>
+            <div v-if="internetLinks.length">
+                <p class="mb-1 text-sm font-medium text-slate-700">Liens Internet (FAI)</p>
+                <CheckboxList id="internet_link_ids" v-model="form.internet_link_ids" :options="internetLinks" />
+            </div>
         </FormSection>
+
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" :builtin="{ category_id: form.category_id, status: form.status }" id-prefix="extra" />
 
         <div class="flex justify-end gap-2">
             <Link :href="document ? route('clients.documents.show', [context.id, document.id]) : route('clients.documents.index', context.id)" class="btn-secondary">Annuler</Link>

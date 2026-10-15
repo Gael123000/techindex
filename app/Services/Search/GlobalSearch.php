@@ -3,8 +3,10 @@
 namespace App\Services\Search;
 
 use App\Models\Client;
+use App\Models\CustomRecord;
 use App\Models\Document;
 use App\Models\Equipment;
+use App\Models\InternetLink;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
@@ -27,8 +29,10 @@ class GlobalSearch
         'clients' => 'Clients',
         'sites' => 'Sites',
         'equipment' => 'Équipements',
+        'internet_links' => 'Accès Internet (FAI)',
         'services' => 'Services',
         'documents' => 'Documentation',
+        'records' => 'Fiches personnalisées',
     ];
 
     private const GROUP_LIMIT = 8;
@@ -76,6 +80,45 @@ class GlobalSearch
         }
 
         return ['mode' => 'groups', 'groups' => $groups];
+    }
+
+    /**
+     * Suggestions de la barre de recherche globale : quelques résultats par
+     * type, sans comptage complet (une ligne de plus suffit à savoir s'il en
+     * existe d'autres), pour répondre pendant la frappe.
+     *
+     * @return list<array{type: string, label: string, has_more: bool, items: list<array<string, mixed>>}>
+     */
+    public function suggest(User $user, string $term, int $limit = 5): array
+    {
+        $term = trim($term);
+        $groups = [];
+
+        foreach (array_keys(self::TYPES) as $key) {
+            $query = $this->query($key, $user, $term, []);
+
+            if ($query === null) {
+                continue;
+            }
+
+            $models = $query->limit($limit + 1)->get();
+
+            if ($models->isEmpty()) {
+                continue;
+            }
+
+            $groups[] = [
+                'type' => $key,
+                'label' => self::TYPES[$key],
+                'has_more' => $models->count() > $limit,
+                'items' => $models->take($limit)
+                    ->map(fn (Model $model): array => $this->present($key, $model, $term))
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        return $groups;
     }
 
     /**
@@ -132,6 +175,22 @@ class GlobalSearch
                     'name',
                 )),
 
+            'internet_links' => InternetLink::query()->visibleTo($user)
+                ->when($client, fn (Builder $query) => $query->where('client_id', $client))
+                ->when($site, fn (Builder $query) => $query->where('site_id', $site))
+                ->when($status, fn (Builder $query) => $this->statusFilter($query, $status, 'archived'))
+                ->where(fn (Builder $query) => $this->match(
+                    $query,
+                    ['name', 'operator_name', 'description', 'notes'],
+                    ['name', 'operator_name', 'line_reference', 'customer_number', 'contract_reference'],
+                    $term,
+                )
+                    ->orWhere('public_ips', 'like', $this->like($term))
+                    ->orWhereHas('isp', fn (Builder $query) => $query->where('name', 'like', $this->like($term)))
+                    ->orWhereHas('tags', fn (Builder $query) => $query->where('name', 'like', $this->like($term))))
+                ->with(['client:id,name', 'isp', 'site:id,name'])
+                ->tap(fn (Builder $query) => $this->orderByRelevance($query, ['name', 'operator_name', 'description', 'notes'], $term, 'name')),
+
             'services' => Service::query()->visibleTo($user)
                 ->when($client, fn (Builder $query) => $query->where('client_id', $client))
                 ->when($site, fn (Builder $query) => $query->where('site_id', $site))
@@ -149,6 +208,17 @@ class GlobalSearch
                 ->with(['client:id,name', 'category:id,name'])
                 ->select(['id', 'client_id', 'category_id', 'title', 'content_text', 'status', 'last_verified_at', 'review_interval_days', 'updated_at'])
                 ->tap(fn (Builder $query) => $this->orderByRelevance($query, ['title', 'content_text'], $term, 'title')),
+
+            'records' => CustomRecord::query()->visibleTo($user)
+                ->whereHas('recordType', fn (Builder $query) => $query->where('is_system', false)->where('is_active', true))
+                ->when($client, fn (Builder $query) => $query->where('client_id', $client))
+                ->when($site, fn (Builder $query) => $query->where('site_id', $site))
+                ->when($status, fn (Builder $query) => $this->statusFilter($query, $status, 'archived'))
+                ->where(fn (Builder $query) => $this->match($query, ['title', 'search_text'], ['title'], $term)
+                    ->orWhereHas('tags', fn (Builder $query) => $query->where('name', 'like', $this->like($term))))
+                ->with(['client:id,name', 'recordType:id,name,icon', 'site:id,name'])
+                ->select(['id', 'client_id', 'record_type_id', 'site_id', 'title', 'search_text', 'status'])
+                ->tap(fn (Builder $query) => $this->orderByRelevance($query, ['title', 'search_text'], $term, 'title')),
 
             default => null,
         };
@@ -304,6 +374,16 @@ class GlobalSearch
                 'client' => $model->client->only(['id', 'name']),
                 'icon' => $model->type?->icon,
             ],
+            'internet_links' => [
+                'id' => $model->id,
+                'title' => $model->name,
+                'subtitle' => collect([$model->operatorLabel(), $model->technology?->label(), $model->bandwidthLabel(), $model->line_reference, $model->site?->name])
+                    ->filter()->implode(' · '),
+                'url' => route('clients.internet-links.show', [$model->client_id, $model->id]),
+                'status' => $model->status->value,
+                'client' => $model->client->only(['id', 'name']),
+                'logo_url' => $model->isp?->logoUrl(),
+            ],
             'services' => [
                 'id' => $model->id,
                 'title' => $model->name,
@@ -311,6 +391,16 @@ class GlobalSearch
                 'url' => route('clients.services.show', [$model->client_id, $model->id]),
                 'status' => $model->status->value,
                 'client' => $model->client->only(['id', 'name']),
+            ],
+            'records' => [
+                'id' => $model->id,
+                'title' => $model->title,
+                'subtitle' => collect([$model->recordType?->name, $model->site?->name])->filter()->implode(' · '),
+                'excerpt' => $model->search_text ? $this->excerpt((string) $model->search_text, $term) : null,
+                'url' => route('clients.records.show', [$model->client_id, $model->id]),
+                'status' => $model->status->value,
+                'client' => $model->client->only(['id', 'name']),
+                'icon' => $model->recordType?->icon,
             ],
             'documents' => [
                 'id' => $model->id,

@@ -7,6 +7,8 @@ use App\Models\Attachment;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\Credential;
+use App\Models\InternetLink;
+use App\Models\Isp;
 use App\Models\User;
 use App\Rules\AllowedAttachment;
 use App\Support\AuditPresenter;
@@ -79,6 +81,33 @@ trait InteractsWithClient
     }
 
     /**
+     * @return Collection<int, array{value: int, label: string}>
+     */
+    protected function internetLinkOptions(Client $client): Collection
+    {
+        return $client->internetLinks()->with('isp:id,name')->orderBy('name')->get(['id', 'name', 'isp_id', 'operator_name'])
+            ->map(fn (InternetLink $link): array => [
+                'value' => $link->id,
+                'label' => $link->name.(($operator = $link->operatorLabel()) !== null ? ' – '.$operator : ''),
+            ]);
+    }
+
+    /**
+     * Opérateurs du catalogue proposés dans les formulaires : ceux qui sont
+     * actifs, plus l'opérateur déjà choisi s'il a été masqué depuis.
+     *
+     * @return Collection<int, array{value: int, label: string, logo_url: string|null, active: bool}>
+     */
+    protected function ispOptions(?int $currentId = null): Collection
+    {
+        return Isp::query()
+            ->where(fn ($query) => $query->where('is_active', true)->when($currentId, fn ($query, int $id) => $query->orWhere('id', $id)))
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Isp $isp): array => $isp->toOption());
+    }
+
+    /**
      * Pièces jointes d'un élément, avec les liens de téléchargement contrôlés.
      *
      * Pour la fiche client, seuls les fichiers de la racine de son dossier sont
@@ -127,7 +156,7 @@ trait InteractsWithClient
     }
 
     /**
-     * Accès (métadonnées uniquement) rattachés à un équipement ou un service.
+     * Accès (métadonnées uniquement) rattachés à un équipement, un service ou un lien Internet.
      * La route de révélation dépend de l'écran : fiches (confirmation du mot
      * de passe) ou gestionnaire de mots de passe (déverrouillé par clé d'accès).
      *
@@ -153,6 +182,7 @@ trait InteractsWithClient
             'updated_at' => $credential->updated_at?->toIso8601String(),
             'equipment' => $credential->relationLoaded('equipment') ? $credential->equipment?->only(['id', 'name']) : null,
             'service' => $credential->relationLoaded('service') ? $credential->service?->only(['id', 'name']) : null,
+            'internet_link' => $credential->relationLoaded('internetLink') ? $credential->internetLink?->only(['id', 'name']) : null,
             'folder' => $credential->relationLoaded('folder') ? $credential->folder?->only(['id', 'name']) : null,
             'reveal_url' => $canReveal && $credential->has_secret ? route($revealRoute, [$client, $credential]) : null,
         ]);

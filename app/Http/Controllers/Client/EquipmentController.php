@@ -10,12 +10,12 @@ use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EquipmentRequest;
 use App\Models\Client;
-use App\Models\CustomField;
 use App\Models\Equipment;
 use App\Models\EquipmentLink;
 use App\Models\EquipmentType;
 use App\Services\Inventory\EquipmentQuery;
 use App\Services\Inventory\EquipmentService;
+use App\Services\Records\RecordExtensions;
 use App\Services\Tags\TagResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,6 +30,7 @@ class EquipmentController extends Controller
     public function __construct(
         private readonly EquipmentService $service,
         private readonly TagResolver $tags,
+        private readonly RecordExtensions $extensions,
     ) {}
 
     public function index(Request $request, Client $client): Response
@@ -63,6 +64,7 @@ class EquipmentController extends Controller
         return Inertia::render('Equipment/Form', [
             'context' => $this->context($client, $request),
             'equipment' => null,
+            'extension' => $this->extensions->form('equipment', $client, null),
             ...$this->formOptions($client),
         ]);
     }
@@ -71,7 +73,7 @@ class EquipmentController extends Controller
     {
         Gate::authorize('contribute', $client);
 
-        $equipment = $this->service->save(new Equipment, $client, $request->validated(), $request->customFields());
+        $equipment = $this->service->save(new Equipment, $client, $request->validated());
 
         return redirect()->route('clients.equipment.show', [$client, $equipment])->with('success', 'Équipement créé.');
     }
@@ -86,7 +88,6 @@ class EquipmentController extends Controller
             'site:id,name',
             'tags:id,name,color',
             'interfaces.subnet:id,name,cidr',
-            'customValues',
             'outgoingLinks.target:id,name,hostname,status',
             'incomingLinks.source:id,name,hostname,status',
             'services:id,client_id,name,category,status',
@@ -96,9 +97,6 @@ class EquipmentController extends Controller
             'creator:id,name',
             'editor:id,name',
         ]);
-
-        $fields = CustomField::query()->forType($equipment->equipment_type_id)->get();
-        $values = $equipment->customValues->keyBy('custom_field_id');
 
         $links = $equipment->outgoingLinks->map(fn (EquipmentLink $link): array => [
             'id' => $link->id,
@@ -134,10 +132,9 @@ class EquipmentController extends Controller
                 'creator' => $equipment->creator?->only(['id', 'name']),
                 'editor' => $equipment->editor?->only(['id', 'name']),
             ],
-            'customFields' => $fields->map(fn (CustomField $field): array => [
-                'label' => $field->label,
-                'type' => $field->type->value,
-                'value' => $values->get($field->id)?->displayValue($field->type),
+            'extension' => $this->extensions->present('equipment', $client->id, $equipment, [
+                'equipment_type_id' => $equipment->equipment_type_id,
+                'status' => $equipment->status->value,
             ]),
             'links' => $links,
             'services' => $equipment->services->map(fn ($service): array => [
@@ -146,7 +143,7 @@ class EquipmentController extends Controller
             'licenses' => $equipment->licenses,
             'certificates' => $equipment->certificates,
             'documents' => $equipment->documents,
-            'credentials' => $this->presentCredentials($equipment->credentials()->orderBy('label')->get(), $client, $user),
+            'credentials' => $this->presentCredentials($equipment->credentials()->with(['equipment:id,name', 'service:id,name', 'internetLink:id,name'])->orderBy('label')->get(), $client, $user),
             'accessTypes' => AccessType::options(),
             'attachments' => $this->attachmentsFor($equipment, $client, $user),
             'history' => $this->historyFor($equipment, $user),
@@ -166,9 +163,7 @@ class EquipmentController extends Controller
     {
         Gate::authorize('update', $equipment);
 
-        $equipment->load(['tags:id,name', 'interfaces', 'customValues']);
-        $values = $equipment->customValues->keyBy('custom_field_id');
-        $fields = CustomField::query()->get();
+        $equipment->load(['tags:id,name', 'interfaces']);
 
         return Inertia::render('Equipment/Form', [
             'context' => $this->context($client, $request),
@@ -185,10 +180,8 @@ class EquipmentController extends Controller
                 'end_of_life_at' => $equipment->end_of_life_at?->format('Y-m-d'),
                 'tags' => $equipment->tags->pluck('name'),
                 'interfaces' => $equipment->interfaces->map->only(['label', 'ip_address', 'mac_address', 'subnet_id', 'is_primary', 'notes']),
-                'custom_fields' => $fields->mapWithKeys(fn (CustomField $field): array => [
-                    $field->id => $values->get($field->id)?->value($field->type),
-                ]),
             ],
+            'extension' => $this->extensions->form('equipment', $client, $equipment),
             ...$this->formOptions($client),
         ]);
     }
@@ -197,7 +190,7 @@ class EquipmentController extends Controller
     {
         Gate::authorize('update', $equipment);
 
-        $this->service->save($equipment, $client, $request->validated(), $request->customFields());
+        $this->service->save($equipment, $client, $request->validated());
 
         return redirect()->route('clients.equipment.show', [$client, $equipment])->with('success', 'Équipement mis à jour.');
     }
@@ -232,8 +225,6 @@ class EquipmentController extends Controller
             'subnets' => $client->subnets()->orderBy('cidr')->get(['id', 'name', 'cidr'])
                 ->map(fn ($subnet): array => ['value' => $subnet->id, 'label' => $subnet->name.' ('.$subnet->cidr.')']),
             'statuses' => EquipmentStatus::options(),
-            'customFields' => CustomField::query()->orderBy('sort_order')->orderBy('label')
-                ->get(['id', 'equipment_type_id', 'key', 'label', 'type', 'options', 'is_required', 'help_text']),
             'tags' => $this->tags->options(),
             'suggestions' => [
                 'manufacturers' => $client->equipment()->whereNotNull('manufacturer')->distinct()->orderBy('manufacturer')->limit(100)->pluck('manufacturer'),

@@ -7,12 +7,13 @@ import CheckboxInput from '@/components/CheckboxInput.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TagInput from '@/components/TagInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, CustomFieldDefinition, Option, TagRef } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordValue, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -54,7 +55,6 @@ interface EquipmentData {
     end_of_life_at: string | null;
     tags: string[];
     interfaces: InterfaceRow[];
-    custom_fields: Record<string, string | number | boolean | null>;
 }
 
 const props = defineProps<{
@@ -64,7 +64,8 @@ const props = defineProps<{
     sites: Option<number>[];
     subnets: Option<number>[];
     statuses: Option[];
-    customFields: CustomFieldDefinition[];
+    /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null;
     tags: TagRef[];
     suggestions: { manufacturers: string[]; suppliers: string[]; os: string[] };
 }>();
@@ -96,13 +97,12 @@ const form = useForm({
     end_of_life_at: e?.end_of_life_at ?? '',
     tags: e?.tags ?? ([] as string[]),
     interfaces: (e?.interfaces.length ? e.interfaces : [{ label: '', ip_address: '', mac_address: '', subnet_id: null, is_primary: true, notes: '' }]) as InterfaceRow[],
-    custom_fields: { ...(e?.custom_fields ?? {}) } as Record<string, string | number | boolean | null>,
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 const typeOptions = computed(() => props.types.map((type) => ({ value: type.id, label: type.name })));
-const applicableFields = computed(() =>
-    props.customFields.filter((field) => field.equipment_type_id === null || field.equipment_type_id === form.equipment_type_id),
-);
+// Champs d'origine utilisables dans les conditions d'affichage des champs ajoutés.
+const builtin = computed(() => ({ equipment_type_id: form.equipment_type_id, status: form.status }));
 
 const textInputs = {
     hardware: [
@@ -285,41 +285,7 @@ function submit(): void {
             </div>
         </section>
 
-        <FormSection v-if="applicableFields.length" title="Champs personnalisés" description="Champs définis par l'administrateur pour ce type d'équipement.">
-            <template v-for="field in applicableFields" :key="field.id">
-                <CheckboxInput
-                    v-if="field.type === 'boolean'"
-                    :id="`cf-${field.id}`"
-                    :model-value="Boolean(form.custom_fields[field.id])"
-                    :label="field.label"
-                    :description="field.help_text ?? undefined"
-                    @update:model-value="form.custom_fields[field.id] = $event ?? false"
-                />
-                <FormField v-else :id="`cf-${field.id}`" :label="field.label" :error="form.errors[`custom_fields.${field.id}`]" :hint="field.help_text ?? undefined" :required="field.is_required">
-                    <template #default="{ describedBy, invalid }">
-                        <SelectInput
-                            v-if="field.type === 'select'"
-                            :id="`cf-${field.id}`"
-                            :model-value="(form.custom_fields[field.id] as string | null) ?? null"
-                            :options="(field.options ?? []).map((option) => ({ value: option, label: option }))"
-                            placeholder="—"
-                            :described-by="describedBy"
-                            :invalid="invalid"
-                            @update:model-value="form.custom_fields[field.id] = $event ?? null"
-                        />
-                        <TextInput
-                            v-else
-                            :id="`cf-${field.id}`"
-                            :model-value="(form.custom_fields[field.id] as string | number | null) ?? null"
-                            :type="field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'url' ? 'url' : 'text'"
-                            :described-by="describedBy"
-                            :invalid="invalid"
-                            @update:model-value="form.custom_fields[field.id] = $event ?? null"
-                        />
-                    </template>
-                </FormField>
-            </template>
-        </FormSection>
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" :builtin="builtin" id-prefix="extra" />
 
         <FormSection title="Description et notes">
             <FormField id="description" label="Description" :error="form.errors.description" class="sm:col-span-2">

@@ -7,12 +7,13 @@ import CheckboxList from '@/components/CheckboxList.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TagInput from '@/components/TagInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option, ServiceCategoryDefinition, TagRef } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordValue, ServiceCategoryDefinition, TagRef } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -46,12 +47,14 @@ const props = defineProps<{
     sites: Option<number>[];
     equipment: Option<number>[];
     tags: TagRef[];
+    /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null;
 }>();
 
 const s = props.service;
 
 const form = useForm({
-    category: s?.category ?? props.defaultCategory ?? 'internet',
+    category: s?.category ?? props.defaultCategory ?? props.categories[0]?.value ?? 'other',
     site_id: s?.site_id ?? null,
     name: s?.name ?? '',
     provider: s?.provider ?? '',
@@ -65,6 +68,7 @@ const form = useForm({
     details: { ...(s?.details ?? {}) } as Record<string, string | number | boolean | null>,
     equipment_ids: s?.equipment_ids ?? ([] as number[]),
     tags: s?.tags ?? ([] as string[]),
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 const categoryOptions = computed(() => props.categories.map((category) => ({ value: category.value, label: category.label })));
@@ -211,6 +215,8 @@ function submit(): void {
                 </template>
             </FormField>
         </FormSection>
+
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" :builtin="{ category: form.category, status: form.status }" id-prefix="extra" />
 
         <div class="flex justify-end gap-2">
             <Link :href="service ? route('clients.services.show', [context.id, service.id]) : route('clients.services.index', context.id)" class="btn-secondary">Annuler</Link>

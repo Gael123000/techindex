@@ -6,11 +6,12 @@ import CheckboxList from '@/components/CheckboxList.vue';
 import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option } from '@/types';
+import type { ClientContext, Option, RecordFormDefinition, RecordValue } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -44,6 +45,8 @@ const props = defineProps<{
     periods: Option[];
     sites: Option<number>[];
     equipment: Option<number>[];
+    /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null;
 }>();
 
 const l = props.license;
@@ -67,6 +70,7 @@ const form = useForm({
     status: l?.status ?? 'active',
     notes: l?.notes ?? '',
     equipment_ids: l?.equipment_ids ?? ([] as number[]),
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 function submit(): void {
@@ -180,6 +184,8 @@ function submit(): void {
                 </template>
             </FormField>
         </FormSection>
+
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" :builtin="{ kind: form.kind, status: form.status }" id-prefix="extra" />
 
         <div class="flex justify-end gap-2">
             <Link :href="license ? route('clients.licenses.show', [context.id, license.id]) : route('clients.licenses.index', context.id)" class="btn-secondary">Annuler</Link>

@@ -57,7 +57,9 @@ app/
     Backup/              Sauvegarde, vérification, restauration
     Documents/           Filtrage HTML, gestion des versions
     Export/, Import/     Échanges CSV / Excel
-    Inventory/           Équipements (interfaces, champs personnalisés, filtres)
+    Internet/            Conversion des anciens services « Connexion Internet » en liens FAI
+    Inventory/           Équipements (interfaces, filtres)
+    Records/             Constructeur de fiches : structure SQL, valeurs, extensions
     Search/              Recherche globale
     Spreadsheets/        Lecture / écriture CSV et XLSX (OpenSpout)
   Console/Commands/      Commandes techindex:* (administrateur, clés, sauvegardes, diagnostic)
@@ -83,8 +85,12 @@ users ──< client_user >── clients
                             ├──< sites ──< (rattachement facultatif des éléments ci-dessous)
                             ├──< contacts
                             ├──< equipment ──< network_interfaces >── subnets ──> vlans
-                            │        ├──< custom_field_values >── custom_fields ──> equipment_types
                             │        └──< equipment_links (source → cible, type de lien)
+                            ├──< internet_links ──> isps (catalogue des FAI)
+                            │        ├──< equipment_internet_link, document_internet_link
+                            │        └──< subnets (WAN), credentials (accès de l'opérateur)
+                            ├──< custom_records ──> record_types ──< record_fields
+                            │        └── cx_<fiche> (une ligne par enregistrement, une colonne par champ)
                             ├──< services ──< equipment_service >── equipment
                             ├──< licenses ──< equipment_license >── equipment
                             ├──< certificates ──< certificate_equipment >── equipment
@@ -110,7 +116,11 @@ tags ──< taggables (polymorphe)          audit_logs (client_id facultatif)  
 | `equipment` | Type, marque, modèle, numéro de série, statut (en service, maintenance, hors service, archivé), dates d'achat, de garantie et de fin de vie, fournisseur, URL d'administration. |
 | `network_interfaces` | Plusieurs adresses IP et MAC par équipement (MAC normalisée pour la recherche), interface principale. |
 | `equipment_links` | Liens typés entre équipements : héberge, protégé par, connecté à, dépend de, sauvegardé par, alimenté par. |
-| `custom_fields`, `custom_field_values` | Champs personnalisés typés (texte, nombre, date, oui/non, liste, URL), stockés dans une colonne par type. |
+| `isps` | Catalogue des fournisseurs d'accès (FAI) : site, espace client, page d'état, assistance, logo fourni (`database/data/isp-logos`) ou déposé. |
+| `internet_links` | Liens Internet d'un client : opérateur, technologie, débits, IP publiques, raccordement WAN, contrat, GTR, engagement. |
+| `record_types`, `record_fields` | Constructeur de fiches : fiches par défaut et fiches créées, sections, réglages ; champs (type, options, condition d'affichage, largeur, section). |
+| `custom_records` | Enregistrements des fiches créées : identifiant unique, client, site, titre et texte de recherche recopiés. |
+| `cx_<nom>`, `cx_ext_<fiche>` | Tables créées par le constructeur : une colonne typée par champ, une ligne par enregistrement (`record_id`). Noms contrôlés et préfixés, changements de structure hors transaction et sous verrou (`RecordSchema`). |
 | `vlans`, `subnets` | Réseaux du client (CIDR, passerelle, DHCP, VLAN). |
 | `services` | Accès Internet, VPN, domaines et DNS, hébergement, cloud, messagerie, applications métier, sauvegardes. Les champs propres à chaque catégorie sont dans `details` (JSON validé côté serveur). |
 | `licenses` | Licences, abonnements et contrats de support : quantité, fournisseur, échéance, renouvellement, coût. |
@@ -247,7 +257,10 @@ Détail dans [publication-et-mises-a-jour.md](publication-et-mises-a-jour.md).
 
 ## 5. Recherche
 
-La recherche globale utilise uniquement MariaDB (pas de moteur externe) :
+La recherche globale utilise uniquement MariaDB (pas de moteur externe). La
+barre de l'en-tête interroge `/search/suggest` pendant la frappe (après une
+courte pause, quelques résultats par type, débit limité) ; Entrée ouvre la
+page de recherche complète.
 
 - FULLTEXT en mode booléen, avec préfixes, sur les noms, descriptions, notes
   et le texte des documents ;

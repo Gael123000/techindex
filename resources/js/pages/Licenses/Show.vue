@@ -6,10 +6,11 @@ import ClientHeader from '@/components/ClientHeader.vue';
 import DeleteResource from '@/components/DeleteResource.vue';
 import ExpiryBadge from '@/components/ExpiryBadge.vue';
 import HistoryList from '@/components/HistoryList.vue';
+import RecordValuesDisplay from '@/components/RecordValuesDisplay.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency, formatDate } from '@/lib/format';
-import type { AuditEntry, ClientContext } from '@/types';
+import type { AuditEntry, ClientContext, RecordPresentedSection } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -40,6 +41,8 @@ defineProps<{
     history: AuditEntry[];
     warnDays: number;
     can: { update: boolean; delete: boolean };
+    /** Champs ajoutés avec le constructeur de fiches. */
+    extension: RecordPresentedSection[] | null;
 }>();
 </script>
 
@@ -81,6 +84,8 @@ defineProps<{
                 </div>
                 <div v-if="license.notes" class="mt-4 rounded-md bg-slate-50 p-3 text-sm whitespace-pre-line text-slate-700">{{ license.notes }}</div>
             </section>
+
+            <RecordValuesDisplay v-if="extension?.length" :sections="extension" />
             <section class="card">
                 <header class="border-b border-slate-200 px-4 py-3"><h2 class="text-sm font-semibold text-navy-900">Historique</h2></header>
                 <HistoryList :entries="history" />

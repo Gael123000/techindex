@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\RecordStatus;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SiteRequest;
@@ -11,6 +12,7 @@ use App\Models\Site;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -18,7 +20,7 @@ use Inertia\Response;
 
 class SiteController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     public function index(Request $request, Client $client): Response
     {
@@ -49,6 +51,7 @@ class SiteController extends Controller
         return Inertia::render('Sites/Form', [
             'context' => $this->context($client, $request),
             'site' => null,
+            'extension' => $this->extensionForm('site', $client, null),
         ]);
     }
 
@@ -56,10 +59,15 @@ class SiteController extends Controller
     {
         Gate::authorize('contribute', $client);
 
-        $site = new Site($request->validated());
-        $site->client()->associate($client);
-        $site->status = RecordStatus::Active;
-        $site->save();
+        $site = DB::transaction(function () use ($request, $client): Site {
+            $site = new Site($request->safe()->except('fields'));
+            $site->client()->associate($client);
+            $site->status = RecordStatus::Active;
+            $site->save();
+            $this->saveExtension('site', $site, $client, $request->validated(), true);
+
+            return $site;
+        });
 
         return redirect()->route('clients.sites.show', [$client, $site])->with('success', 'Site créé.');
     }
@@ -80,6 +88,7 @@ class SiteController extends Controller
             'subnets' => $site->subnets()->with('vlan:id,number,name')->orderBy('cidr')->get(),
             'services' => $site->services()->orderBy('name')->get(['id', 'client_id', 'site_id', 'name', 'category', 'provider', 'status']),
             'history' => $this->historyFor($site, $user),
+            'extension' => $this->extensionDisplay('site', $client, $site, ['status' => $site->status->value]),
             'can' => [
                 'update' => Gate::allows('update', $site),
                 'delete' => Gate::allows('delete', $site),
@@ -94,6 +103,7 @@ class SiteController extends Controller
         return Inertia::render('Sites/Form', [
             'context' => $this->context($client, $request),
             'site' => $site,
+            'extension' => $this->extensionForm('site', $client, $site),
         ]);
     }
 
@@ -101,7 +111,12 @@ class SiteController extends Controller
     {
         Gate::authorize('update', $site);
 
-        $site->update($request->validated());
+        DB::transaction(function () use ($request, $client, $site): void {
+            $site->fill($request->safe()->except('fields'));
+            $this->saveExtension('site', $site, $client, $request->validated(), false);
+            $site->save();
+            $site->flushPendingAudit();
+        });
 
         return redirect()->route('clients.sites.show', [$client, $site])->with('success', 'Site mis à jour.');
     }

@@ -1,8 +1,10 @@
 <?php
 
-use App\Http\Controllers\Admin\CustomFieldController;
 use App\Http\Controllers\Admin\DocumentCategoryController;
 use App\Http\Controllers\Admin\EquipmentTypeController;
+use App\Http\Controllers\Admin\IspController;
+use App\Http\Controllers\Admin\RecordFieldController;
+use App\Http\Controllers\Admin\RecordTypeController;
 use App\Http\Controllers\Admin\TagController;
 use App\Http\Controllers\Admin\UpdateController;
 use App\Http\Controllers\Admin\UserAccessController;
@@ -12,11 +14,13 @@ use App\Http\Controllers\Client\AttachmentController;
 use App\Http\Controllers\Client\CertificateController;
 use App\Http\Controllers\Client\ContactController;
 use App\Http\Controllers\Client\CredentialController;
+use App\Http\Controllers\Client\CustomRecordController;
 use App\Http\Controllers\Client\DocumentController;
 use App\Http\Controllers\Client\EquipmentController;
 use App\Http\Controllers\Client\EquipmentLinkController;
 use App\Http\Controllers\Client\ExportController as ClientExportController;
 use App\Http\Controllers\Client\HistoryController;
+use App\Http\Controllers\Client\InternetLinkController;
 use App\Http\Controllers\Client\LicenseController;
 use App\Http\Controllers\Client\NetworkController;
 use App\Http\Controllers\Client\ServiceController;
@@ -30,8 +34,10 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\Files\FileExplorerController;
 use App\Http\Controllers\Files\FileFolderController;
 use App\Http\Controllers\ImportController;
+use App\Http\Controllers\IspLogoController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\SearchSuggestionController;
 use App\Http\Controllers\Security\ConfirmationStatusController;
 use App\Http\Controllers\Security\PasskeyController;
 use App\Http\Controllers\TagSuggestionController;
@@ -46,8 +52,10 @@ Route::redirect('/', '/dashboard');
 Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/search', SearchController::class)->name('search');
+    Route::get('/search/suggest', SearchSuggestionController::class)->middleware('throttle:search')->name('search.suggest');
     Route::get('/equipment', EquipmentIndexController::class)->name('equipment.index');
     Route::get('/tags/suggest', TagSuggestionController::class)->name('tags.suggest');
+    Route::get('/isps/{isp}/logo', IspLogoController::class)->name('isps.logo');
 
     // Profil et sécurité du compte.
     Route::get('/profile', [ProfileController::class, 'show'])->middleware('no-store')->name('profile.show');
@@ -132,6 +140,9 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         Route::delete('/equipment-links/{equipmentLink}', [EquipmentLinkController::class, 'destroy'])->name('equipment-links.destroy');
 
         Route::get('/network', NetworkController::class)->name('network.index');
+        Route::resource('internet-links', InternetLinkController::class);
+        Route::post('/internet-links/{internet_link}/archive', [InternetLinkController::class, 'archive'])->name('internet-links.archive');
+
         Route::resource('vlans', VlanController::class)->only(['store', 'update', 'destroy']);
         Route::resource('subnets', SubnetController::class)->only(['store', 'update', 'destroy']);
 
@@ -149,6 +160,21 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         Route::resource('documents', DocumentController::class);
         Route::post('/documents/{document}/verify', [DocumentController::class, 'verify'])->name('documents.verify');
         Route::get('/documents/{document}/versions/{version}', [DocumentController::class, 'version'])->name('documents.versions.show');
+
+        // Fiches créées avec le constructeur : un onglet par fiche active.
+        Route::get('/fiches/{recordType:key}', [CustomRecordController::class, 'index'])->name('records.index');
+        Route::get('/fiches/{recordType:key}/create', [CustomRecordController::class, 'create'])->name('records.create');
+        Route::post('/fiches/{recordType:key}', [CustomRecordController::class, 'store'])->name('records.store');
+        Route::get('/fiches/{recordType:key}/export/{format}', [CustomRecordController::class, 'export'])
+            ->middleware('throttle:exports')
+            ->whereIn('format', ['csv', 'xlsx'])
+            ->name('records.export');
+        Route::get('/records/{customRecord}', [CustomRecordController::class, 'show'])->name('records.show');
+        Route::get('/records/{customRecord}/edit', [CustomRecordController::class, 'edit'])->name('records.edit');
+        Route::put('/records/{customRecord}', [CustomRecordController::class, 'update'])->name('records.update');
+        Route::post('/records/{customRecord}/archive', [CustomRecordController::class, 'archive'])->name('records.archive');
+        Route::post('/records/{customRecord}/restore', [CustomRecordController::class, 'restore'])->name('records.restore');
+        Route::delete('/records/{customRecord}', [CustomRecordController::class, 'destroy'])->name('records.destroy');
 
         Route::post('/attachments', [AttachmentController::class, 'store'])->name('attachments.store');
         Route::get('/attachments/{attachment}', [AttachmentController::class, 'show'])->name('attachments.show');
@@ -197,8 +223,19 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         Route::put('/users/{user}/access', [UserAccessController::class, 'update'])->name('users.access.update');
 
         Route::resource('equipment-types', EquipmentTypeController::class)->only(['index', 'store', 'update', 'destroy']);
-        Route::resource('custom-fields', CustomFieldController::class)->only(['index', 'store', 'update', 'destroy']);
+        // Anciens champs personnalisés : désormais dans le constructeur de fiches.
+        Route::redirect('/custom-fields', '/admin/record-types');
         Route::resource('document-categories', DocumentCategoryController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::resource('isps', IspController::class)->only(['index', 'store', 'update', 'destroy']);
+
+        // Constructeur de fiches : chaque champ ajouté crée une colonne dans la table de la fiche.
+        Route::resource('record-types', RecordTypeController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::put('/record-types/{record_type}/layout', [RecordTypeController::class, 'layout'])->name('record-types.layout');
+        Route::prefix('record-types/{recordType}')->name('record-types.')->scopeBindings()->group(function (): void {
+            Route::post('/fields', [RecordFieldController::class, 'store'])->name('fields.store');
+            Route::put('/fields/{field}', [RecordFieldController::class, 'update'])->name('fields.update');
+            Route::delete('/fields/{field}', [RecordFieldController::class, 'destroy'])->name('fields.destroy');
+        });
         Route::resource('tags', TagController::class)->only(['index', 'store', 'update', 'destroy']);
 
         // Mises à jour de l'application (installation : confirmation récente de l'identité).

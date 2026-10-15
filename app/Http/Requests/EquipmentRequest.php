@@ -4,9 +4,9 @@ namespace App\Http\Requests;
 
 use App\Enums\EquipmentStatus;
 use App\Models\Client;
-use App\Models\CustomField;
+use App\Models\Equipment;
+use App\Services\Records\RecordExtensions;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -68,14 +68,12 @@ class EquipmentRequest extends FormRequest
             'interfaces.*.subnet_id' => ['nullable', 'integer', Rule::exists('subnets', 'id')->where('client_id', $client->id)],
             'interfaces.*.is_primary' => ['boolean'],
             'interfaces.*.notes' => ['nullable', 'string', 'max:255'],
-            'custom_fields' => ['nullable', 'array'],
         ];
 
-        foreach ($this->customFields() as $field) {
-            $rules['custom_fields.'.$field->id] = $field->valueRules();
-        }
+        // Champs ajoutés à la fiche « Équipements » avec le constructeur (fields[...]).
+        $equipment = $this->route('equipment');
 
-        return $rules;
+        return [...$rules, ...app(RecordExtensions::class)->rules('equipment', $client, $this->all(), $equipment instanceof Equipment ? $equipment : null)];
     }
 
     /**
@@ -83,9 +81,7 @@ class EquipmentRequest extends FormRequest
      */
     public function attributes(): array
     {
-        return $this->customFields()
-            ->mapWithKeys(fn (CustomField $field): array => ['custom_fields.'.$field->id => mb_strtolower($field->label)])
-            ->all();
+        return app(RecordExtensions::class)->attributes('equipment');
     }
 
     public function messages(): array
@@ -106,17 +102,5 @@ class EquipmentRequest extends FormRequest
                 }
             },
         ];
-    }
-
-    /**
-     * Champs personnalisés applicables au type choisi.
-     *
-     * @return Collection<int, CustomField>
-     */
-    public function customFields(): Collection
-    {
-        $typeId = $this->integer('equipment_type_id') ?: null;
-
-        return once(fn () => CustomField::query()->forType($typeId)->get())->values();
     }
 }

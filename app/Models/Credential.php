@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Accès à un équipement ou à un service.
+ * Accès à un équipement, à un service ou à un lien Internet (FAI).
  *
  * Le gestionnaire de mots de passe et les fiches (équipement, service) lisent
  * la même table : un accès créé d'un côté apparaît immédiatement de l'autre.
@@ -26,7 +26,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property AccessType $access_type
  */
-#[Fillable(['equipment_id', 'service_id', 'folder_id', 'label', 'access_type', 'username', 'url', 'host', 'port', 'notes'])]
+#[Fillable(['equipment_id', 'service_id', 'internet_link_id', 'folder_id', 'label', 'access_type', 'username', 'url', 'host', 'port', 'notes'])]
 #[Hidden(['secret_ciphertext', 'secret_key_id'])]
 #[Appends(['has_secret'])]
 class Credential extends Model
@@ -52,6 +52,7 @@ class Credential extends Model
         return [
             'equipment_id' => [Equipment::class, 'name'],
             'service_id' => [Service::class, 'name'],
+            'internet_link_id' => [InternetLink::class, 'name'],
             'folder_id' => [VaultFolder::class, 'name'],
         ];
     }
@@ -78,6 +79,14 @@ class Credential extends Model
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    /**
+     * @return BelongsTo<InternetLink, $this>
+     */
+    public function internetLink(): BelongsTo
+    {
+        return $this->belongsTo(InternetLink::class);
     }
 
     protected function hasSecret(): Attribute

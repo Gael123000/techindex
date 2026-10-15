@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\DocumentStatus;
+use App\Http\Controllers\Concerns\HasRecordExtensions;
 use App\Http\Controllers\Concerns\InteractsWithClient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DocumentRequest;
@@ -26,7 +27,7 @@ use Inertia\Response;
 
 class DocumentController extends Controller
 {
-    use InteractsWithClient;
+    use HasRecordExtensions, InteractsWithClient;
 
     public function __construct(
         private readonly DocumentService $service,
@@ -92,7 +93,9 @@ class DocumentController extends Controller
                 'review_interval_days' => (int) config('techindex.documents.default_review_interval_days'),
                 'equipment_ids' => array_filter([(int) $request->query('equipment')]),
                 'service_ids' => array_filter([(int) $request->query('service')]),
+                'internet_link_ids' => array_filter([(int) $request->query('internet_link')]),
             ],
+            'extension' => $this->extensionForm('document', $client, null),
             ...$this->formOptions($client),
         ]);
     }
@@ -118,6 +121,8 @@ class DocumentController extends Controller
             'tags:id,name,color',
             'equipment:id,client_id,name,hostname',
             'services:id,client_id,name,category',
+            'internetLinks:id,client_id,name,isp_id,operator_name',
+            'internetLinks.isp',
             'creator:id,name',
             'editor:id,name',
         ]);
@@ -144,6 +149,9 @@ class DocumentController extends Controller
                 'services' => $document->services->map(fn ($service): array => [
                     'id' => $service->id, 'name' => $service->name, 'category' => $service->category->label(),
                 ]),
+                'internet_links' => $document->internetLinks->map(fn ($link): array => [
+                    'id' => $link->id, 'name' => $link->name, 'operator' => $link->operatorLabel(),
+                ]),
                 'created_at' => $document->created_at?->toIso8601String(),
                 'updated_at' => $document->updated_at?->toIso8601String(),
                 'creator' => $document->creator?->only(['id', 'name']),
@@ -152,6 +160,10 @@ class DocumentController extends Controller
             'versions' => $document->versions()->with('author:id,name')->get(['id', 'document_id', 'version', 'title', 'change_summary', 'created_by', 'created_at']),
             'attachments' => $this->attachmentsFor($document, $client, $user),
             'history' => $this->historyFor($document, $user),
+            'extension' => $this->extensionDisplay('document', $client, $document, [
+                'category_id' => $document->category_id === null ? null : (string) $document->category_id,
+                'status' => $document->status->value,
+            ]),
             'can' => [
                 'update' => Gate::allows('update', $document),
                 'delete' => Gate::allows('delete', $document),
@@ -175,10 +187,12 @@ class DocumentController extends Controller
                 'review_interval_days' => $document->review_interval_days,
                 'equipment_ids' => $document->equipment()->pluck('equipment.id'),
                 'service_ids' => $document->services()->pluck('services.id'),
+                'internet_link_ids' => $document->internetLinks()->pluck('internet_links.id'),
                 'tags' => $document->tags()->pluck('name'),
                 'current_version' => $document->current_version,
             ],
             'defaults' => null,
+            'extension' => $this->extensionForm('document', $client, $document),
             ...$this->formOptions($client),
         ]);
     }
@@ -261,6 +275,7 @@ class DocumentController extends Controller
                 ->map(fn (User $user): array => ['value' => $user->id, 'label' => $user->name]),
             'equipment' => $this->equipmentOptions($client),
             'services' => $this->serviceOptions($client),
+            'internetLinks' => $this->internetLinkOptions($client),
             'tags' => $this->tags->options(),
         ];
     }

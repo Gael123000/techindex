@@ -181,11 +181,73 @@ Menu **Administration** (administrateurs uniquement) :
 
 - **Types d'équipement** : nom et icône. Un type utilisé par au moins un
   équipement ne peut pas être supprimé.
-- **Champs personnalisés** : par type d'équipement ou pour tous. Types
-  possibles : texte, nombre, date, oui/non, liste de choix, URL. La valeur est
-  validée selon son type.
+- **Fiches et champs** : constructeur de fiches (voir ci-dessous).
 - **Catégories de documents**.
+- **Fournisseurs d'accès** : catalogue des opérateurs (FAI) commun à tous les
+  clients, livré avec les principaux opérateurs français et étrangers et leurs
+  logos. Pour chaque opérateur : site web, espace client, page d'état du
+  réseau, numéros d'assistance, e-mail du support et notes (procédure
+  d'ouverture d'incident...). Un logo peut être déposé (PNG, JPEG ou WebP) ; il
+  remplace le logo fourni. Un opérateur utilisé par un lien ne peut pas être
+  supprimé : décochez « Proposé dans les formulaires » pour le masquer.
 - **Étiquettes** : nom et couleur, partagées entre clients, éléments et documents.
+
+### Constructeur de fiches
+
+**Administration › Fiches et champs** permet :
+
+- **de créer des fiches** : chaque fiche devient un onglet dans tous les
+  clients (placé après l'onglet choisi), avec sa liste, son formulaire, sa
+  page, son historique, ses étiquettes, ses pièces jointes, son export et sa
+  place dans la recherche globale. À la création, vous choisissez le nom de
+  la table de la base de données (`cx_<nom>`) ; il est figé ensuite ;
+- **d'ajouter des champs aux fiches par défaut** (client, sites, contacts,
+  équipements, réseau, FAI, services, licences, certificats, documentation).
+  Leurs champs d'origine sont verrouillés : ils ne peuvent être ni modifiés ni
+  supprimés. Les champs ajoutés apparaissent dans une ou plusieurs sections en
+  bas du formulaire et de la fiche, et sont stockés dans une table
+  d'extension (`cx_ext_<fiche>`).
+
+Dans le constructeur :
+
+- **Formulaire** : glissez un type de champ dans une section (ou cliquez
+  dessus). Chaque champ ajouté crée une **colonne typée** dans la table de la
+  fiche ; son nom technique (nom de la colonne) est proposé à partir du
+  libellé, modifiable avant l'enregistrement, puis figé. Glissez les champs
+  pour les réorganiser ; chaque section a 1, 2 ou 3 colonnes et chaque champ
+  occupe une colonne, deux ou toute la largeur. La disposition est enregistrée
+  automatiquement.
+- **Types de champs** : texte court ou long, texte mis en forme, nombre entier
+  ou décimal, montant, date, date et heure, oui / non, liste de choix (liste
+  déroulante ou boutons), choix multiples, e-mail, adresse web, téléphone,
+  adresse IP, réseau CIDR, lien vers une fiche (site, équipement, contact,
+  accès, autre fiche créée... du même client), utilisateur de TechIndex.
+- **Comportement** : saisie obligatoire, valeur unique parmi les fiches du
+  client, colonne de la liste, inclusion dans la recherche, valeur par
+  défaut, minimum et maximum, unité, texte d'aide et d'exemple.
+- **Condition d'affichage** : un champ peut n'apparaître que selon la valeur
+  d'un autre champ (« Date de résiliation » seulement si « Statut » vaut
+  « Résilié ») ou d'un champ d'origine (« Nombre de ports » seulement pour le
+  type d'équipement « Switch »). Un champ masqué n'est ni obligatoire ni
+  modifié.
+- **Aperçu** : le formulaire tel que le verront les techniciens.
+- **Réglages** (fiches créées) : noms, icône, onglet, tri de la liste,
+  site, étiquettes, pièces jointes ; une fiche désactivée n'a plus d'onglet.
+- **Base de données** : la table, ses colonnes et leur type SQL.
+
+Précautions :
+
+- changer le type d'un champ déjà rempli n'est accepté que sans perte de
+  données (texte court vers texte long, entier vers décimal...) ;
+- supprimer un champ supprime sa colonne et ses valeurs ; supprimer une fiche
+  supprime sa table, ses enregistrements et leurs pièces jointes (saisie du
+  nom demandée dans les deux cas) ;
+- aucun champ ne peut contenir de secret : un libellé évoquant un mot de
+  passe, une clé ou un jeton est refusé. Les secrets restent chiffrés dans
+  les accès, qu'un champ « lien vers une fiche » peut désigner ;
+- les anciens champs personnalisés des équipements ont été repris dans la
+  fiche « Équipements », avec une condition d'affichage par type
+  d'équipement.
 
 Seuils des alertes du tableau de bord, en jours, dans `.env` :
 

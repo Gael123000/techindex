@@ -2,11 +2,9 @@
 
 namespace Tests\Feature\Management;
 
-use App\Enums\CustomFieldType;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Client;
-use App\Models\CustomField;
 use App\Models\Equipment;
 use App\Models\EquipmentType;
 use App\Models\Service;
@@ -105,11 +103,9 @@ class InventoryManagementTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['event' => 'client.restored', 'subject_id' => $this->client->id]);
     }
 
-    public function test_equipment_with_multiple_addresses_and_typed_custom_fields(): void
+    public function test_equipment_with_multiple_addresses(): void
     {
         $type = EquipmentType::query()->where('slug', 'switch')->sole();
-        $ports = CustomField::query()->create(['equipment_type_id' => $type->id, 'key' => 'ports', 'label' => 'Nombre de ports', 'type' => CustomFieldType::Number, 'is_required' => true]);
-        $poe = CustomField::query()->create(['equipment_type_id' => null, 'key' => 'poe', 'label' => 'PoE', 'type' => CustomFieldType::Boolean]);
         $site = Site::factory()->for($this->client)->create();
 
         $payload = [
@@ -119,29 +115,20 @@ class InventoryManagementTest extends TestCase
                 ['label' => 'Uplink', 'ip_address' => '10.1.2.2', 'mac_address' => '', 'is_primary' => false],
                 ['label' => '', 'ip_address' => '', 'mac_address' => ''],
             ],
-            'custom_fields' => [$ports->id => 'quarante-huit', $poe->id => true],
         ];
 
-        // Valeur de type incorrect pour un champ numérique.
-        $this->actingAs($this->manager)->post("/clients/{$this->client->id}/equipment", $payload)->assertSessionHasErrors("custom_fields.{$ports->id}");
-
-        $payload['custom_fields'][$ports->id] = 48;
         $this->actingAs($this->manager)->post("/clients/{$this->client->id}/equipment", $payload)->assertSessionHasNoErrors();
 
         $equipment = Equipment::query()->where('name', 'SW-01')->sole();
         $this->assertSame(2, $equipment->interfaces()->count());
         $this->assertSame('00:11:22:AA:BB:CC', $equipment->interfaces()->where('label', 'Mgmt')->value('mac_address'));
-        $this->assertEquals(48.0, $equipment->customValues()->where('custom_field_id', $ports->id)->value('value_number'));
-        $this->assertTrue((bool) $equipment->customValues()->where('custom_field_id', $poe->id)->value('value_boolean'));
 
         // Modification des adresses : une seule entrée d'historique regroupe les changements.
         $payload['interfaces'] = [['label' => 'Mgmt', 'ip_address' => '10.1.1.3', 'is_primary' => true]];
-        $payload['custom_fields'][$ports->id] = 24;
         $this->actingAs($this->manager)->put("/clients/{$this->client->id}/equipment/{$equipment->id}", $payload)->assertSessionHasNoErrors();
 
         $log = AuditLog::query()->where('event', 'equipment.updated')->sole();
         $this->assertStringContainsString('10.1.1.3', $log->changes['interfaces']['new']);
-        $this->assertSame('24', $log->changes['Champ « Nombre de ports »']['new']);
     }
 
     public function test_invalid_ip_and_mac_are_rejected(): void

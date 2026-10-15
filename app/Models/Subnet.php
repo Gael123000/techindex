@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SubnetPurpose;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToClient;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Sous-réseau / plan d'adressage.
  */
-#[Fillable(['site_id', 'vlan_id', 'name', 'cidr', 'gateway', 'dns_servers', 'dhcp_enabled', 'dhcp_range', 'description'])]
+#[Fillable(['site_id', 'vlan_id', 'purpose', 'internet_link_id', 'name', 'cidr', 'gateway', 'dns_servers', 'dhcp_enabled', 'dhcp_range', 'description'])]
 class Subnet extends Model
 {
     use Auditable, BelongsToClient;
@@ -21,6 +22,7 @@ class Subnet extends Model
     {
         return [
             'dhcp_enabled' => 'boolean',
+            'purpose' => SubnetPurpose::class,
         ];
     }
 
@@ -41,6 +43,16 @@ class Subnet extends Model
     }
 
     /**
+     * Lien Internet (FAI) qui dessert ce sous-réseau, typiquement un WAN.
+     *
+     * @return BelongsTo<InternetLink, $this>
+     */
+    public function internetLink(): BelongsTo
+    {
+        return $this->belongsTo(InternetLink::class);
+    }
+
+    /**
      * @return HasMany<NetworkInterface, $this>
      */
     public function interfaces(): HasMany
@@ -58,6 +70,7 @@ class Subnet extends Model
         return [
             'site_id' => [Site::class, 'name'],
             'vlan_id' => [Vlan::class, 'name'],
+            'internet_link_id' => [InternetLink::class, 'name'],
         ];
     }
 

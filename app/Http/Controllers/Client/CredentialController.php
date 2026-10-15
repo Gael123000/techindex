@@ -42,6 +42,7 @@ class CredentialController extends Controller
             'type' => ['nullable', Rule::enum(AccessType::class)],
             'equipment' => ['nullable', 'integer'],
             'service' => ['nullable', 'integer'],
+            'internet_link' => ['nullable', 'integer'],
         ]);
 
         $user = $request->user();
@@ -53,7 +54,8 @@ class CredentialController extends Controller
             ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $query->where('access_type', $type))
             ->when($filters['equipment'] ?? null, fn (Builder $query, int $id) => $query->where('equipment_id', $id))
             ->when($filters['service'] ?? null, fn (Builder $query, int $id) => $query->where('service_id', $id))
-            ->with(['equipment:id,name', 'service:id,name'])
+            ->when($filters['internet_link'] ?? null, fn (Builder $query, int $id) => $query->where('internet_link_id', $id))
+            ->with(['equipment:id,name', 'service:id,name', 'internetLink:id,name'])
             ->orderBy('label')
             ->paginate(50)
             ->withQueryString();
@@ -68,10 +70,12 @@ class CredentialController extends Controller
                 'type' => $filters['type'] ?? null,
                 'equipment' => $filters['equipment'] ?? null,
                 'service' => $filters['service'] ?? null,
+                'internet_link' => $filters['internet_link'] ?? null,
             ],
             'types' => AccessType::options(),
             'equipment' => $this->equipmentOptions($client),
             'services' => $this->serviceOptions($client),
+            'internetLinks' => $this->internetLinkOptions($client),
             'can' => [
                 'create' => Gate::allows('contribute', $client),
                 'write_secrets' => Gate::allows('contribute', $client) && $user->hasClientPermission($client, ClientPermission::Secrets),

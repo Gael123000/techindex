@@ -4,10 +4,11 @@ import { route } from 'ziggy-js';
 import ClientHeader from '@/components/ClientHeader.vue';
 import FormField from '@/components/FormField.vue';
 import FormSection from '@/components/FormSection.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext } from '@/types';
+import type { ClientContext, RecordFormDefinition, RecordValue } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -23,9 +24,11 @@ interface SiteData {
     phone: string | null;
     access_instructions: string | null;
     notes: string | null;
+    status?: string;
 }
 
-const props = defineProps<{ context: ClientContext; site: SiteData | null }>();
+const props = defineProps<{ context: ClientContext; site: SiteData | null; /** Champs ajoutés avec le constructeur de fiches (null s'il n'y en a aucun). */
+    extension: RecordFormDefinition | null }>();
 
 const form = useForm({
     name: props.site?.name ?? '',
@@ -38,6 +41,7 @@ const form = useForm({
     phone: props.site?.phone ?? '',
     access_instructions: props.site?.access_instructions ?? '',
     notes: props.site?.notes ?? '',
+    fields: { ...(props.extension?.values ?? {}) } as Record<string, RecordValue>,
 });
 
 const textFields: Array<{ key: 'address_line1' | 'address_line2' | 'postal_code' | 'city' | 'country' | 'phone'; label: string; autocomplete?: string }> = [
@@ -103,6 +107,8 @@ function submit(): void {
                 </template>
             </FormField>
         </FormSection>
+
+        <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" :builtin="{ status: site?.status ?? 'active' }" id-prefix="extra" />
 
         <div class="flex justify-end gap-2">
             <Link :href="site ? route('clients.sites.show', [context.id, site.id]) : route('clients.sites.index', context.id)" class="btn-secondary">Annuler</Link>

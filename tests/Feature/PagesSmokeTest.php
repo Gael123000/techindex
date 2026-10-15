@@ -7,6 +7,7 @@ use App\Models\Certificate;
 use App\Models\Client;
 use App\Models\Document;
 use App\Models\Equipment;
+use App\Models\InternetLink;
 use App\Models\License;
 use App\Models\Service;
 use App\Models\Site;
@@ -37,6 +38,7 @@ class PagesSmokeTest extends TestCase
         $site = Site::query()->where('client_id', $client->id)->firstOrFail();
         $equipment = Equipment::query()->where('client_id', $client->id)->where('name', 'HYP-01')->firstOrFail();
         $service = Service::query()->where('client_id', $client->id)->where('category', 'backup')->firstOrFail();
+        $internet = InternetLink::query()->where('client_id', $client->id)->where('role', 'primary')->firstOrFail();
         $license = License::query()->where('client_id', $client->id)->firstOrFail();
         $certificate = Certificate::query()->where('client_id', $client->id)->firstOrFail();
         $document = Document::query()->where('client_id', $client->id)->firstOrFail();
@@ -63,6 +65,11 @@ class PagesSmokeTest extends TestCase
             '/equipment' => 'Equipment/Index',
             '/equipment?alert=warranty' => 'Equipment/Index',
             "{$c}/network" => 'Network/Index',
+            "{$c}/internet-links" => 'InternetLinks/Index',
+            "{$c}/internet-links?status=all&q=fibre" => 'InternetLinks/Index',
+            "{$c}/internet-links/create" => 'InternetLinks/Form',
+            "{$c}/internet-links/{$internet->id}" => 'InternetLinks/Show',
+            "{$c}/internet-links/{$internet->id}/edit" => 'InternetLinks/Form',
             "{$c}/services" => 'Services/Index',
             "{$c}/services/create?category=vpn" => 'Services/Form',
             "{$c}/services/{$service->id}" => 'Services/Show',
@@ -100,8 +107,9 @@ class PagesSmokeTest extends TestCase
             '/admin/users/create' => 'Admin/Users/Form',
             "/admin/users/{$user->id}/edit" => 'Admin/Users/Form',
             '/admin/equipment-types' => 'Admin/EquipmentTypes/Index',
-            '/admin/custom-fields' => 'Admin/CustomFields/Index',
+            '/admin/record-types' => 'Admin/RecordTypes/Index',
             '/admin/document-categories' => 'Admin/DocumentCategories/Index',
+            '/admin/isps' => 'Admin/Isps/Index',
             '/admin/tags' => 'Admin/Tags/Index',
             '/admin/updates' => 'Admin/Updates/Index',
         ];

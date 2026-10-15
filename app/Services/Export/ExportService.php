@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Equipment;
+use App\Models\InternetLink;
 use App\Models\License;
 use App\Models\Service;
 use App\Models\Site;
@@ -26,6 +27,7 @@ class ExportService
         'sites' => 'Sites',
         'contacts' => 'Contacts',
         'services' => 'Services',
+        'internet_links' => 'Accès Internet (FAI)',
         'licenses' => 'Licences et abonnements',
         'certificates' => 'Certificats',
         'subnets' => 'Plan d\'adressage',
@@ -45,7 +47,8 @@ class ExportService
             'services' => ['Nom', 'Catégorie', 'Fournisseur', 'Référence', 'URL', 'Site', 'Statut', 'Début', 'Échéance', 'Équipements liés', 'Description', 'Notes'],
             'licenses' => ['Nom', 'Nature', 'Éditeur', 'Fournisseur', 'Référence du contrat', 'Quantité', 'Périodicité', 'Coût', 'Date d\'achat', 'Début', 'Expiration', 'Renouvellement automatique', 'Préavis (jours)', 'Informations de renouvellement', 'Statut', 'Équipements liés', 'Notes'],
             'certificates' => ['Nom', 'Nom commun (CN)', 'Noms alternatifs', 'Émetteur', 'Type', 'Numéro de série', 'Empreinte SHA-256', 'Émis le', 'Expire le', 'Renouvellement automatique', 'Méthode de renouvellement', 'Statut', 'Service', 'Équipements', 'Notes'],
-            'subnets' => ['Nom', 'Réseau (CIDR)', 'VLAN', 'Site', 'Passerelle', 'Serveurs DNS', 'DHCP', 'Plage DHCP', 'Adresses utilisées', 'Description'],
+            'internet_links' => ['Nom', 'Opérateur', 'Rôle', 'Technologie', 'Statut', 'Site', 'Débit descendant (Mbit/s)', 'Débit montant (Mbit/s)', 'Débit garanti (Mbit/s)', 'Numéro de client', 'Référence du contrat', 'Référence de ligne', 'Mode de connexion', 'Identifiant de connexion', 'VLAN opérateur', 'Adresses IP publiques', 'Passerelle', 'Serveurs DNS', 'GTR', 'Support', 'Mise en service', "Fin d'engagement", 'Coût mensuel', 'Équipements liés', 'Étiquettes', 'Description', 'Notes'],
+            'subnets' => ['Nom', 'Réseau (CIDR)', 'Usage', 'Lien Internet', 'VLAN', 'Site', 'Passerelle', 'Serveurs DNS', 'DHCP', 'Plage DHCP', 'Adresses utilisées', 'Description'],
             'documents' => ['Titre', 'Catégorie', 'Statut', 'Responsable', 'Version', 'Dernière vérification', 'Mis à jour le'],
         };
     }
@@ -150,10 +153,25 @@ class ExportService
                 }
                 break;
 
-            case 'subnets':
-                foreach ($scope(Subnet::query())->with(['vlan:id,number,name', 'site:id,name'])->withCount('interfaces')->lazyById(200) as $item) {
+            case 'internet_links':
+                foreach ($scope(InternetLink::query())->with(['isp:id,name', 'site:id,name', 'equipment:id,name', 'tags:id,name'])->lazyById(200) as $item) {
                     yield [
-                        $item->name, $item->cidr, $item->vlan ? $item->vlan->number.' – '.$item->vlan->name : null, $item->site?->name,
+                        $item->name, $item->operatorLabel(), $item->role->label(), $item->technology?->label(), $item->status->label(),
+                        $item->site?->name, $item->download_mbps, $item->upload_mbps, $item->guaranteed_mbps, $item->customer_number,
+                        $item->contract_reference, $item->line_reference, $item->connection_mode?->label(), $item->connection_username,
+                        $item->wan_vlan, $item->public_ips, $item->wan_gateway, $item->dns_servers, $item->gtr, $item->support_phone,
+                        $item->commissioned_at?->format('Y-m-d'), $item->commitment_ends_at?->format('Y-m-d'),
+                        $item->monthly_cost === null ? null : (float) $item->monthly_cost, $item->equipment->pluck('name')->implode(', '),
+                        $item->tags->pluck('name')->implode(', '), $item->description, $item->notes,
+                    ];
+                }
+                break;
+
+            case 'subnets':
+                foreach ($scope(Subnet::query())->with(['vlan:id,number,name', 'site:id,name', 'internetLink:id,name'])->withCount('interfaces')->lazyById(200) as $item) {
+                    yield [
+                        $item->name, $item->cidr, $item->purpose?->label(), $item->internetLink?->name,
+                        $item->vlan ? $item->vlan->number.' – '.$item->vlan->name : null, $item->site?->name,
                         $item->gateway, $item->dns_servers, $item->dhcp_enabled, $item->dhcp_range, $item->interfaces_count, $item->description,
                     ];
                 }
@@ -181,6 +199,7 @@ class ExportService
             'sites' => Site::class,
             'contacts' => Contact::class,
             'services' => Service::class,
+            'internet_links' => InternetLink::class,
             'licenses' => License::class,
             'certificates' => Certificate::class,
             'subnets' => Subnet::class,

@@ -11,12 +11,14 @@ import EmptyState from '@/components/EmptyState.vue';
 import FormField from '@/components/FormField.vue';
 import Modal from '@/components/Modal.vue';
 import Pagination from '@/components/Pagination.vue';
+import RecordFieldsForm from '@/components/RecordFieldsForm.vue';
+import RecordValuesInline from '@/components/RecordValuesInline.vue';
 import SelectInput from '@/components/SelectInput.vue';
 import TextArea from '@/components/TextArea.vue';
 import TextInput from '@/components/TextInput.vue';
 import { useFilters } from '@/composables/useFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { ClientContext, Option, Paginated } from '@/types';
+import type { ClientContext, Option, Paginated, RecordFormDefinition, RecordPresentedSection, RecordValue } from '@/types';
 
 defineOptions({ layout: AppLayout });
 
@@ -34,6 +36,9 @@ interface ContactRow {
     is_primary: boolean;
     notes: string | null;
     site: { id: number; name: string } | null;
+    /** Champs ajoutés avec le constructeur de fiches. */
+    fields?: Record<string, RecordValue>;
+    extra?: RecordPresentedSection[];
 }
 
 const props = defineProps<{
@@ -41,6 +46,7 @@ const props = defineProps<{
     contacts: Paginated<ContactRow>;
     filters: { q: string; site: number | null; technical: boolean };
     sites: Option<number>[];
+    extension: RecordFormDefinition | null;
 }>();
 
 const { filters } = useFilters(() => route('clients.contacts.index', props.context.id), { ...props.filters });
@@ -61,6 +67,7 @@ const form = useForm({
     is_technical: false,
     is_primary: false,
     notes: '',
+    fields: {} as Record<string, RecordValue>,
 });
 
 function open(contact: ContactRow | null): void {
@@ -76,6 +83,7 @@ function open(contact: ContactRow | null): void {
     form.is_technical = contact?.is_technical ?? false;
     form.is_primary = contact?.is_primary ?? false;
     form.notes = contact?.notes ?? '';
+    form.fields = { ...(contact ? (contact.fields ?? {}) : (props.extension?.defaults ?? {})) };
     showForm.value = true;
 }
 
@@ -148,6 +156,7 @@ const textFields: Array<{ key: 'first_name' | 'last_name' | 'job_title' | 'email
                             </p>
                             <p class="text-xs text-slate-500">{{ contact.job_title }}</p>
                             <p v-if="contact.notes" class="mt-1 text-xs whitespace-pre-line text-slate-500">{{ contact.notes }}</p>
+                            <RecordValuesInline :sections="contact.extra" />
                         </td>
                         <td>{{ contact.site?.name ?? '—' }}</td>
                         <td class="text-xs">
@@ -194,6 +203,7 @@ const textFields: Array<{ key: 'first_name' | 'last_name' | 'job_title' | 'email
                     <TextArea id="contact_notes" v-model="form.notes" :described-by="describedBy" :invalid="invalid" />
                 </template>
             </FormField>
+            <RecordFieldsForm v-if="extension" :definition="extension" :values="form.fields" :errors="form.errors" variant="embedded" id-prefix="contact-extra" />
         </form>
         <template #footer>
             <button type="button" class="btn-secondary" @click="showForm = false">Annuler</button>

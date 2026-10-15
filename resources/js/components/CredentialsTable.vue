@@ -19,14 +19,26 @@ const props = withDefaults(
         canWriteSecrets: boolean;
         equipment?: Option<number>[];
         services?: Option<number>[];
+        internetLinks?: Option<number>[];
         fixedEquipmentId?: number | null;
         fixedServiceId?: number | null;
+        fixedInternetLinkId?: number | null;
         showTarget?: boolean;
         compact?: boolean;
         /** Lien vers les mêmes accès dans le gestionnaire de mots de passe. */
         vaultUrl?: string;
     }>(),
-    { showTarget: true, compact: false, fixedEquipmentId: undefined, fixedServiceId: undefined, equipment: undefined, services: undefined, vaultUrl: undefined },
+    {
+        showTarget: true,
+        compact: false,
+        fixedEquipmentId: undefined,
+        fixedServiceId: undefined,
+        fixedInternetLinkId: undefined,
+        equipment: undefined,
+        services: undefined,
+        internetLinks: undefined,
+        vaultUrl: undefined,
+    },
 );
 
 const editing = ref<CredentialRow | null>(null);
@@ -105,6 +117,7 @@ function destroy(): void {
                         <td v-if="showTarget" class="text-xs">
                             <Link v-if="credential.equipment" :href="route('clients.equipment.show', [clientId, credential.equipment.id])" class="link">{{ credential.equipment.name }}</Link>
                             <Link v-else-if="credential.service" :href="route('clients.services.show', [clientId, credential.service.id])" class="link">{{ credential.service.name }}</Link>
+                            <Link v-else-if="credential.internet_link" :href="route('clients.internet-links.show', [clientId, credential.internet_link.id])" class="link">{{ credential.internet_link.name }}</Link>
                             <span v-else class="text-slate-400">Client</span>
                         </td>
                         <td class="text-right whitespace-nowrap">
@@ -131,9 +144,11 @@ function destroy(): void {
         :types="types"
         :equipment="equipment"
         :services="services"
+        :internet-links="internetLinks"
         :can-write-secrets="canWriteSecrets"
         :fixed-equipment-id="fixedEquipmentId"
         :fixed-service-id="fixedServiceId"
+        :fixed-internet-link-id="fixedInternetLinkId"
         @close="showForm = false"
     />
 

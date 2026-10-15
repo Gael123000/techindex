@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
 import { Search } from '@lucide/vue';
-import { computed, reactive, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, watch } from 'vue';
 import { route } from 'ziggy-js';
 import DynamicIcon from '@/components/DynamicIcon.vue';
 import EmptyState from '@/components/EmptyState.vue';
@@ -23,6 +23,7 @@ interface ResultItem {
     status: string;
     client: { id: number; name: string } | null;
     icon?: string | null;
+    logo_url?: string | null;
 }
 
 interface Group {
@@ -78,13 +79,32 @@ watch(
     },
 );
 
+// Recherche en direct : les résultats suivent la saisie après une courte pause.
+let typingTimer: number | undefined;
+
+watch(
+    () => form.q,
+    (value) => {
+        window.clearTimeout(typingTimer);
+        typingTimer = window.setTimeout(() => {
+            const term = value.trim();
+
+            if (term.length >= 2 || (term === '' && props.query !== '')) {
+                submit();
+            }
+        }, 300);
+    },
+);
+
+onBeforeUnmount(() => window.clearTimeout(typingTimer));
+
 function showAll(type: string): void {
     form.type = type;
 }
 </script>
 
 <template>
-    <PageHeader title="Recherche" description="Clients, sites, équipements (nom, modèle, n° de série, IP, MAC), services, documentation et étiquettes." :breadcrumbs="[{ label: 'Recherche' }]" />
+    <PageHeader title="Recherche" description="Clients, sites, équipements (nom, modèle, n° de série, IP, MAC), accès Internet (FAI), services, documentation et étiquettes." :breadcrumbs="[{ label: 'Recherche' }]" />
 
     <form role="search" class="card mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-6" @submit.prevent="submit">
         <div class="sm:col-span-6">
@@ -127,7 +147,8 @@ function showAll(type: string): void {
                 <ul class="divide-y divide-slate-100">
                     <li v-for="item in group.items" :key="item.id" class="px-4 py-2.5 text-sm">
                         <div class="flex items-start gap-2">
-                            <DynamicIcon v-if="item.icon" :name="item.icon" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                            <img v-if="item.logo_url" :src="item.logo_url" alt="" class="mt-0.5 h-5 w-5 shrink-0 rounded-sm object-contain" />
+                            <DynamicIcon v-else-if="item.icon" :name="item.icon" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                             <div class="min-w-0 flex-1">
                                 <Link :href="item.url" class="link">{{ item.title }}</Link>
                                 <StatusBadge v-if="item.status === 'archived'" status="archived" class="ml-2" />
