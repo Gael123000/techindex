@@ -10,9 +10,10 @@ use Throwable;
  * Noms commerciaux des licences Microsoft (« SPB » → « Microsoft 365
  * Business Premium »).
  *
- * Une liste des produits courants est fournie avec TechIndex ; la liste
- * complète publiée par Microsoft peut être téléchargée et conservée dans le
- * stockage local (commande techindex:integrations-sync --refresh-catalogs).
+ * Une liste des produits courants est fournie avec TechIndex
+ * (database/data/microsoft-skus.json) ; la liste complète publiée par
+ * Microsoft peut être téléchargée et conservée dans le stockage local
+ * (commande techindex:integrations-sync --refresh-catalogs).
  */
 class MicrosoftSkuCatalog
 {
@@ -107,7 +108,10 @@ class MicrosoftSkuCatalog
             return $this->names;
         }
 
-        $bundled = $this->decode((string) file_get_contents(resource_path('data/microsoft-skus.json')));
+        // Liste fournie dans database/data (inclus dans toutes les archives,
+        // contrairement à resources/) ; son absence ne doit pas bloquer une synchronisation.
+        $bundledPath = $this->bundledPath();
+        $bundled = is_readable($bundledPath) ? $this->decode((string) file_get_contents($bundledPath)) : [];
         $stored = [];
 
         try {
@@ -126,6 +130,11 @@ class MicrosoftSkuCatalog
         }
 
         return $this->names = $names;
+    }
+
+    protected function bundledPath(): string
+    {
+        return database_path('data/microsoft-skus.json');
     }
 
     /**

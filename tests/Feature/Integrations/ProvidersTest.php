@@ -10,8 +10,10 @@ use App\Models\IntegrationRun;
 use App\Models\License;
 use App\Secrets\IntegrationSecrets;
 use App\Services\Integrations\IntegrationSync;
+use App\Services\Integrations\Support\MicrosoftSkuCatalog;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -107,6 +109,34 @@ class ProvidersTest extends TestCase
         $this->assertSame(14, $premium->assigned_quantity);
         $this->assertSame('2027-03-01', $premium->expires_at->toDateString());
         $this->assertSame(LicenseStatus::Cancelled, $licenses->firstWhere('external_id', '4b9405b0-7788-4568-add1-99614e613b69')->status);
+    }
+
+    public function test_microsoft_product_names_ship_with_every_archive(): void
+    {
+        // L'archive Plesk ne contient de resources/ que les vues : rien d'autre ne doit y être lu.
+        $dockerfile = (string) file_get_contents(base_path('Dockerfile'));
+        $this->assertMatchesRegularExpression('/cp -a [^;]*\bdatabase\b[^;]* \/release\//', $dockerfile);
+        $this->assertFileExists(database_path('data/microsoft-skus.json'));
+
+        foreach (File::allFiles(app_path()) as $file) {
+            $this->assertDoesNotMatchRegularExpression("/resource_path\\('(?!views)/", $file->getContents(), $file->getRelativePathname().' lit un fichier absent de l\'archive Plesk.');
+        }
+
+        $this->assertSame('Microsoft 365 Business Premium', app(MicrosoftSkuCatalog::class)->name('SPB'));
+    }
+
+    public function test_microsoft_product_names_never_break_a_sync(): void
+    {
+        $catalog = new class extends MicrosoftSkuCatalog
+        {
+            protected function bundledPath(): string
+            {
+                return storage_path('inexistant/microsoft-skus.json');
+            }
+        };
+
+        // Liste absente : la référence technique remplace le nom commercial.
+        $this->assertSame('SPB', $catalog->name('SPB'));
     }
 
     public function test_microsoft_consent_callback_checks_state_and_verifies_the_tenant(): void
