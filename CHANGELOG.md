@@ -10,6 +10,8 @@ messages des commits depuis la version précédente.
 
 ## [Non publié]
 
+## [1.0.3] - 2026-10-16
+
 - **Groupes d'entreprises** : un client peut être rattaché à une entreprise
   mère (filiale, établissement, franchisé ; siège social ou holding pour la
   tête de groupe), sur trois niveaux. Dans la liste des clients, les
