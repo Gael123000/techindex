@@ -10,6 +10,8 @@ messages des commits depuis la version précédente.
 
 ## [Non publié]
 
+## [1.0.5] - 2026-10-16
+
 - **Microsoft 365** : la synchronisation échouait sur un hébergement Plesk
   (fichier des noms de licences absent de l'archive). La liste est désormais
   fournie dans `database/data/` et son absence n'interrompt plus une
