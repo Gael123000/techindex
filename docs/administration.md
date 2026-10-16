@@ -219,6 +219,10 @@ Fonctionnement :
    jamais réaffichés : un champ laissé vide conserve la valeur enregistrée),
    réglages (région, adresse de l'API limitée aux domaines du fournisseur),
    fréquence de synchronisation (manuelle, toutes les 6 heures, quotidienne).
+   « Synchroniser » lance la synchronisation aussitôt, sans traitement de
+   fond ; les synchronisations automatiques dépendent de la tâche planifiée.
+   Une synchronisation qui ne démarre pas (10 minutes) ou ne se termine pas
+   (35 minutes) est signalée en échec.
 2. **Comptes** : la première synchronisation récupère les clients (ou
    locataires) du fournisseur. Rattachez chacun à un client TechIndex ; le
    bouton « Rattacher les suggestions » associe ceux dont le nom (sans forme

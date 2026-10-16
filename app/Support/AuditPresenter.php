@@ -59,6 +59,7 @@ final class AuditPresenter
         'export.generated' => 'Export de données',
         'demo.loaded' => 'Chargement des données de démonstration',
         'update.requested' => 'Demande de mise à jour de l\'application',
+        'update.cancelled' => 'Demande de mise à jour annulée',
         'update.completed' => 'Mise à jour de l\'application',
         'update.failed' => 'Échec de la mise à jour de l\'application',
         'integration.synced' => 'Synchronisation d\'une intégration',

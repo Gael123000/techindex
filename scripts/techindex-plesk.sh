@@ -233,6 +233,7 @@ status_begin() {
     STATUS_ACTIVE=1
     STATUS_FROM="$(cat "$APP_DIR/VERSION" 2> /dev/null || true)"
     STATUS_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    STATUS_STEP="Démarrage"
     STATUS_LOG="update-$(date +%Y%m%d-%H%M%S).log"
     mkdir -p "$UPDATES_DIR"
     find "$UPDATES_DIR" -maxdepth 1 -name 'update-*.log' -type f -printf '%f\n' | sort -r | tail -n +10 \
@@ -950,10 +951,12 @@ cmd_install() {
 cmd_update() {
     local archive current
     parse_source "$@"
-    assert_installed
+    # Verrou puis suivi avant toute autre étape : l'administration voit le
+    # démarrage, et un échec dès la recherche de PHP y est signalé.
     acquire_lock
-    status_begin
     STATUS_VERSION="${SOURCE_VERSION/latest/}"
+    status_begin
+    assert_installed
     check_host
     current="$(cat "$APP_DIR/VERSION" 2> /dev/null || true)"
 

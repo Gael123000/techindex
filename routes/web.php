@@ -263,5 +263,6 @@ Route::middleware(['auth', 'session.policy', 'account.setup'])->group(function (
         Route::post('/updates/apply', [UpdateController::class, 'apply'])
             ->middleware(['throttle:update-checks', 'recently-confirmed'])
             ->name('updates.apply');
+        Route::post('/updates/cancel', [UpdateController::class, 'cancel'])->middleware('throttle:update-checks')->name('updates.cancel');
     });
 });

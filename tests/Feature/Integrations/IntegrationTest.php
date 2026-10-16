@@ -5,7 +5,6 @@ namespace Tests\Feature\Integrations;
 use App\Enums\IntegrationFrequency;
 use App\Enums\LicenseStatus;
 use App\Enums\UserRole;
-use App\Jobs\SyncIntegration;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\Integration;
@@ -16,7 +15,6 @@ use App\Secrets\Contracts\SecretVault;
 use App\Secrets\CredentialSecrets;
 use App\Secrets\IntegrationSecrets;
 use App\Secrets\Keyring;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -256,21 +254,58 @@ class IntegrationTest extends TestCase
             ->assertSessionHas('error', 'Connexion à Pax8 : identifiants invalides ou expirés (HTTP 401, access_denied).');
     }
 
-    public function test_scheduled_command_only_queues_due_integrations(): void
+    public function test_scheduled_command_only_syncs_due_integrations(): void
     {
-        Bus::fake();
         $due = $this->configurePax8();
         $due->forceFill(['last_synced_at' => now()->subDays(2)])->save();
+        $this->fakePax8([]);
 
         $recent = Integration::query()->forceCreate(['provider' => 'sophos', 'is_enabled' => true, 'frequency' => 'daily', 'last_synced_at' => now()->subHour()]);
-        Integration::query()->forceCreate(['provider' => 'eset', 'is_enabled' => true, 'frequency' => 'manual']);
-        Integration::query()->forceCreate(['provider' => 'acronis', 'is_enabled' => false, 'frequency' => 'daily']);
+        $manual = Integration::query()->forceCreate(['provider' => 'eset', 'is_enabled' => true, 'frequency' => 'manual']);
+        $disabled = Integration::query()->forceCreate(['provider' => 'acronis', 'is_enabled' => false, 'frequency' => 'daily']);
 
+        // Exécution directe, sans file d'attente.
         $this->artisan('techindex:integrations-sync')->assertSuccessful();
 
-        Bus::assertDispatchedTimes(SyncIntegration::class, 1);
-        Bus::assertDispatched(SyncIntegration::class, fn ($job): bool => $job->integrationId === $due->id);
-        $this->assertSame(0, $recent->runs()->count());
+        $this->assertSame('success', $due->runs()->sole()->status->value);
+        $this->assertSame(0, $recent->runs()->count() + $manual->runs()->count() + $disabled->runs()->count());
+    }
+
+    public function test_a_stalled_run_is_reported_instead_of_waiting_forever(): void
+    {
+        $integration = $this->configurePax8();
+        $admin = $this->admin();
+        $queued = $integration->runs()->create(['trigger' => 'manual', 'status' => 'queued']);
+        $queued->forceFill(['created_at' => now()->subMinutes(15)])->save();
+
+        $this->actingAs($admin)->get('/admin/integrations/pax8')
+            ->assertInertia(fn ($page) => $page->where('running', false)->where('runs.0.status', 'failed'));
+
+        $this->assertSame('failed', $queued->fresh()->status->value);
+        $this->assertSame('failed', $integration->fresh()->last_status->value);
+
+        // Une exécution récente reste suivie normalement.
+        $integration->runs()->create(['trigger' => 'manual', 'status' => 'running', 'started_at' => now()->subMinute()]);
+        $this->actingAs($admin)->get('/admin/integrations/pax8')->assertInertia(fn ($page) => $page->where('running', true));
+    }
+
+    public function test_each_flash_message_has_its_own_identifier(): void
+    {
+        $this->configurePax8();
+        $admin = $this->admin();
+
+        // Le message de l'enregistrement est affiché une fois, puis plus de message.
+        $this->actingAs($admin)->get('/admin/integrations/pax8')
+            ->assertInertia(fn ($page) => $page->where('flash.success', 'Configuration de l\'intégration enregistrée.'));
+        $this->actingAs($admin)->get('/admin/integrations/pax8')
+            ->assertInertia(fn ($page) => $page->where('flash.id', null)->where('flash.success', null));
+
+        $first = $this->actingAs($admin)->withSession(['success' => 'Message'])->get('/admin/integrations/pax8');
+        $second = $this->actingAs($admin)->withSession(['success' => 'Message'])->get('/admin/integrations/pax8');
+
+        $id = fn ($response) => $response->viewData('page')['props']['flash']['id'];
+        $this->assertNotNull($id($first));
+        $this->assertNotSame($id($first), $id($second));
     }
 
     public function test_key_rotation_reseals_integration_credentials(): void

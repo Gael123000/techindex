@@ -60,6 +60,37 @@ class IntegrationSync
         );
     }
 
+    /** Exécution jamais démarrée au-delà de ce délai (minutes) : échec. */
+    public const STALE_QUEUED_MINUTES = 10;
+
+    /** Exécution en cours au-delà de ce délai (minutes) : processus interrompu. */
+    public const STALE_RUNNING_MINUTES = 35;
+
+    /**
+     * Passe en échec les exécutions qui n'ont jamais démarré ou ne se sont
+     * jamais terminées (processus arrêté, traitement de fond absent), pour
+     * que l'interface n'attende pas indéfiniment.
+     */
+    public function expireStalled(Integration $integration): void
+    {
+        $stalled = [
+            [IntegrationRunStatus::Queued, 'created_at', self::STALE_QUEUED_MINUTES, 'La synchronisation n\'a pas démarré (traitement de fond absent ou arrêté) : relancez-la.'],
+            [IntegrationRunStatus::Running, 'started_at', self::STALE_RUNNING_MINUTES, 'Synchronisation interrompue avant la fin (processus arrêté ou délai dépassé) : relancez-la ; si le problème persiste, consultez les journaux du serveur.'],
+        ];
+
+        foreach ($stalled as [$status, $column, $minutes, $message]) {
+            $runs = $integration->runs()->where('status', $status)->where($column, '<', now()->subMinutes($minutes))->get();
+
+            foreach ($runs as $run) {
+                $run->forceFill(['status' => IntegrationRunStatus::Failed, 'message' => $message, 'finished_at' => now()])->save();
+            }
+
+            if ($runs->isNotEmpty() && $integration->runs()->latest('id')->value('id') === $runs->max('id')) {
+                $integration->forceFill(['last_status' => IntegrationRunStatus::Failed, 'last_message' => $message])->saveQuietly();
+            }
+        }
+    }
+
     public function start(Integration $integration, string $trigger, ?User $user = null): IntegrationRun
     {
         return $integration->runs()->create([

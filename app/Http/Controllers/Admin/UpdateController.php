@@ -72,11 +72,29 @@ class UpdateController extends Controller
     }
 
     /**
+     * Annule une demande que la tâche planifiée n'a pas encore prise en charge.
+     */
+    public function cancel(Request $request, UpdateManager $updates): JsonResponse
+    {
+        Gate::authorize('manage-updates');
+
+        if (! $updates->cancel($request->user())) {
+            return response()->json(['message' => 'Aucune demande en attente : la mise à jour a peut-être déjà démarré.'], 409);
+        }
+
+        return response()->json(['message' => 'Demande de mise à jour annulée.']);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function state(UpdateManager $updates): array
     {
+        // Demande jamais prise en charge ou script jamais démarré : échec affiché, pas d'attente sans fin.
+        $updates->expireStalled();
+
         $status = $updates->status();
+        $schedulerLastRun = $updates->schedulerLastRun();
         $pending = $updates->pendingRequest();
         $userIds = array_filter([(int) ($status['requested_by_id'] ?? 0), (int) ($pending['requested_by_id'] ?? 0)]);
         $names = $userIds === [] ? collect() : User::query()->whereKey($userIds)->pluck('name', 'id');
@@ -91,6 +109,12 @@ class UpdateController extends Controller
             ],
             'check' => $updates->lastCheck(),
             'can_apply' => $updates->canApplyFromInterface(),
+            // La tâche planifiée lance les mises à jour demandées : son absence explique une attente.
+            'scheduler' => [
+                'last_run' => $schedulerLastRun === null ? null : date(DATE_ATOM, $schedulerLastRun),
+                'running' => $updates->schedulerRunning(),
+            ],
+            'stale_after' => UpdateManager::STALE_REQUEST_SECONDS,
             'pending' => $pending === null ? null : [
                 'version' => (string) ($pending['version'] ?? ''),
                 'requested_at' => $pending['requested_at'] ?? null,

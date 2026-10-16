@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\Updates\UpdateManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
@@ -14,8 +15,9 @@ use Illuminate\Support\Facades\Schedule;
 |
 */
 
-// Témoin d'activité du planificateur, contrôlé par techindex:doctor.
-Schedule::call(fn () => Cache::forever('techindex:scheduler-heartbeat', now()->getTimestamp()))
+// Témoin d'activité du planificateur, contrôlé par techindex:doctor et affiché
+// pendant une mise à jour demandée depuis l'administration.
+Schedule::call(fn () => Cache::forever(UpdateManager::HEARTBEAT_CACHE_KEY, now()->getTimestamp()))
     ->everyMinute()
     ->name('techindex:scheduler-heartbeat');
 
@@ -40,8 +42,10 @@ Schedule::command('queue:prune-failed', ['--hours' => 720])->dailyAt('03:00');
 
 // Intégrations : synchronisations automatiques arrivées à échéance ; liste des
 // noms de licences Microsoft rafraîchie chaque semaine.
-Schedule::command('techindex:integrations-sync')->hourlyAt(17)->withoutOverlapping();
-Schedule::command('techindex:integrations-sync', ['--refresh-catalogs'])->weeklyOn(1, '04:10')->withoutOverlapping();
+// En arrière-plan : les synchronisations s'exécutent directement et ne retardent
+// pas les autres tâches de la minute.
+Schedule::command('techindex:integrations-sync')->hourlyAt(17)->withoutOverlapping(120)->runInBackground();
+Schedule::command('techindex:integrations-sync', ['--refresh-catalogs'])->weeklyOn(1, '04:10')->withoutOverlapping(120)->runInBackground();
 
 // Contrôle quotidien : tous les secrets restent déchiffrables avec les clés configurées.
 Schedule::command('techindex:secrets-check')->dailyAt('03:15')->withoutOverlapping();

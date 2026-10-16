@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Enums\IntegrationRunStatus;
-use App\Jobs\SyncIntegration;
 use App\Models\Integration;
 use App\Services\Integrations\IntegrationRegistry;
 use App\Services\Integrations\IntegrationSync;
@@ -11,9 +10,11 @@ use App\Services\Integrations\Support\MicrosoftSkuCatalog;
 use Illuminate\Console\Command;
 
 /**
- * Lance les synchronisations automatiques arrivées à échéance (planifiée
- * toutes les heures). Avec --refresh-catalogs, met aussi à jour la liste
- * officielle des noms de produits Microsoft.
+ * Synchronise les intégrations arrivées à échéance (planifiée toutes les
+ * heures, en arrière-plan). Les synchronisations s'exécutent directement,
+ * l'une après l'autre, sans passer par la file d'attente. Avec
+ * --refresh-catalogs, la liste officielle des noms de produits Microsoft
+ * est aussi mise à jour.
  */
 class IntegrationsSync extends Command
 {
@@ -33,7 +34,7 @@ class IntegrationsSync extends Command
         }
 
         $provider = $this->option('provider');
-        $queued = 0;
+        $done = 0;
 
         $integrations = Integration::query()
             ->where('is_enabled', true)
@@ -45,21 +46,23 @@ class IntegrationsSync extends Command
                 continue;
             }
 
+            $sync->expireStalled($integration);
+
             if ($provider === null && ! $integration->frequency->isDue($integration->last_synced_at, now())) {
                 continue;
             }
 
-            // Une synchronisation déjà en attente ou en cours n'est pas doublée.
-            if ($integration->runs()->whereIn('status', [IntegrationRunStatus::Queued, IntegrationRunStatus::Running])->where('created_at', '>', now()->subHours(2))->exists()) {
+            // Une synchronisation déjà en cours (lancée depuis l'administration) n'est pas doublée.
+            if ($integration->runs()->whereIn('status', [IntegrationRunStatus::Queued, IntegrationRunStatus::Running])->exists()) {
                 continue;
             }
 
-            $run = $sync->start($integration, 'scheduled');
-            SyncIntegration::dispatch($run->id, $integration->id);
-            $queued++;
+            $run = $sync->run($sync->start($integration, 'scheduled'));
+            $this->components->twoColumnDetail($registry->label($integration->provider), $run->status->label());
+            $done++;
         }
 
-        $this->components->info("{$queued} synchronisation(s) lancée(s).");
+        $this->components->info("{$done} synchronisation(s) effectuée(s).");
 
         return self::SUCCESS;
     }

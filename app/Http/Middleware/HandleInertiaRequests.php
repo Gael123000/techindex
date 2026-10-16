@@ -7,6 +7,7 @@ use App\Services\Updates\UpdateManager;
 use App\Services\Vault\VaultLock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 /**
@@ -76,11 +77,19 @@ class HandleInertiaRequests extends Middleware
             ],
             // Temps restant avant le reverrouillage des mots de passe (0 : verrouillés).
             'vault' => fn (): ?array => $user === null ? null : ['expires_in' => VaultLock::expiresIn($request)],
-            'flash' => fn (): array => [
-                'success' => $request->session()->get('success') ?? self::STATUS_MESSAGES[$request->session()->get('status')] ?? null,
-                'error' => $request->session()->get('error'),
-                'status' => $request->session()->get('status'),
-            ],
+            'flash' => function () use ($request): array {
+                $success = $request->session()->get('success') ?? self::STATUS_MESSAGES[$request->session()->get('status')] ?? null;
+                $error = $request->session()->get('error');
+
+                return [
+                    'success' => $success,
+                    'error' => $error,
+                    'status' => $request->session()->get('status'),
+                    // Identifiant propre à chaque message : un message déjà affiché ne
+                    // l'est pas de nouveau quand la page se recharge partiellement.
+                    'id' => $success !== null || $error !== null ? Str::random(16) : null,
+                ];
+            },
             // Dernière recherche de mise à jour (sans appel réseau), pour les administrateurs.
             'update_available' => fn (): bool => $user !== null && Gate::forUser($user)->allows('manage-updates')
                 && app(UpdateManager::class)->updateAvailable(),

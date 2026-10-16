@@ -280,6 +280,8 @@ return [
         // Mode d'installation : plesk (mise à jour possible depuis l'interface),
         // docker (commande sur le serveur) ou manual (développement).
         'deployment' => env('TECHINDEX_DEPLOYMENT', 'manual'),
+        // Délai (secondes) laissé au script lancé depuis l'administration pour signaler son démarrage.
+        'start_timeout' => (int) env('UPDATE_START_TIMEOUT', 15),
     ],
 
 ];

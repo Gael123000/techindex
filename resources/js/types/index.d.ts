@@ -27,7 +27,8 @@ export interface SharedProps {
             import: boolean;
         };
     } | null;
-    flash: { success: string | null; error: string | null; status: string | null };
+    /** id : identifiant unique du message, pour ne l'afficher qu'une fois. */
+    flash: { success: string | null; error: string | null; status: string | null; id: string | null };
     update_available: boolean;
     /** Secondes avant le reverrouillage des mots de passe (0 : verrouillés). */
     vault: { expires_in: number } | null;

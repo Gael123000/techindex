@@ -67,13 +67,19 @@ class IntegrationController extends Controller
         ]);
     }
 
-    public function show(string $provider, AccountMatcher $matcher): Response
+    public function show(string $provider, AccountMatcher $matcher, IntegrationSync $sync): Response
     {
         Gate::authorize('manage-settings');
 
         $implementation = $this->registry->get($provider);
         $definition = $implementation->definition();
         $integration = Integration::query()->where('provider', $provider)->first();
+
+        // Exécution bloquée (jamais démarrée ou interrompue) : signalée, la page cesse d'attendre.
+        if ($integration !== null) {
+            $sync->expireStalled($integration);
+            $integration->refresh();
+        }
 
         $accounts = $integration?->accounts()->with('client:id,name')->orderBy('is_ignored')->orderBy('name')->get() ?? collect();
 
@@ -119,7 +125,6 @@ class IntegrationController extends Controller
                 ]),
             'running' => $integration !== null && $integration->runs()
                 ->whereIn('status', [IntegrationRunStatus::Queued, IntegrationRunStatus::Running])
-                ->where('created_at', '>', now()->subHours(2))
                 ->exists(),
             'frequencies' => IntegrationFrequency::options(),
             'manualAccounts' => $implementation instanceof VerifiesAccounts ? $implementation->accountInput() : null,
@@ -208,9 +213,9 @@ class IntegrationController extends Controller
             return back()->with('error', 'Activez l\'intégration et renseignez ses identifiants avant de la synchroniser.');
         }
 
+        $sync->expireStalled($integration);
         $pending = $integration->runs()
             ->whereIn('status', [IntegrationRunStatus::Queued, IntegrationRunStatus::Running])
-            ->where('created_at', '>', now()->subHours(2))
             ->exists();
 
         if ($pending) {
@@ -218,7 +223,9 @@ class IntegrationController extends Controller
         }
 
         $run = $sync->start($integration, 'manual', $request->user());
-        SyncIntegration::dispatch($run->id, $integration->id);
+        // Exécutée juste après l'envoi de la réponse : aucun traitement de fond
+        // (file d'attente, tâche planifiée) n'est nécessaire ; la page suit l'avancement.
+        SyncIntegration::dispatchAfterResponse($run->id, $integration->id);
 
         return back()->with('success', 'Synchronisation lancée : les licences apparaîtront chez les clients rattachés dans quelques instants.');
     }

@@ -5,15 +5,17 @@ namespace App\Jobs;
 use App\Enums\IntegrationRunStatus;
 use App\Models\IntegrationRun;
 use App\Services\Integrations\IntegrationSync;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 /**
- * Synchronisation d'une intégration en file d'attente. Une seule à la fois
- * par intégration (jetons de rafraîchissement à usage unique, quotas).
+ * Synchronisation d'une intégration. Lancée depuis l'administration, elle
+ * s'exécute après l'envoi de la réponse (dispatchAfterResponse) ; elle peut
+ * aussi passer par la file d'attente. Une exécution qui ne démarre pas ou
+ * s'interrompt est signalée par IntegrationSync::expireStalled().
  */
-class SyncIntegration implements ShouldBeUnique, ShouldQueue
+class SyncIntegration implements ShouldQueue
 {
     use Queueable;
 
@@ -21,15 +23,7 @@ class SyncIntegration implements ShouldBeUnique, ShouldQueue
 
     public int $timeout = 1800;
 
-    /** Verrou libéré au plus tard après 2 heures (tâche interrompue). */
-    public int $uniqueFor = 7200;
-
     public function __construct(public readonly int $runId, public readonly int $integrationId) {}
-
-    public function uniqueId(): string
-    {
-        return 'integration-'.$this->integrationId;
-    }
 
     public function handle(IntegrationSync $sync): void
     {
@@ -39,6 +33,25 @@ class SyncIntegration implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // Après la réponse, dans le processus web : la synchronisation ne doit
+        // pas être coupée par la limite d'exécution ni par la fermeture de la page.
+        ignore_user_abort(true);
+
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
         $sync->run($run);
+    }
+
+    /**
+     * Échec de la tâche elle-même (file d'attente) : l'exécution ne reste pas « en attente ».
+     */
+    public function failed(?Throwable $exception): void
+    {
+        IntegrationRun::query()
+            ->whereKey($this->runId)
+            ->whereIn('status', [IntegrationRunStatus::Queued, IntegrationRunStatus::Running])
+            ->update(['status' => IntegrationRunStatus::Failed, 'message' => 'Synchronisation interrompue (erreur du traitement de fond, détails dans les journaux du serveur).', 'finished_at' => now()]);
     }
 }

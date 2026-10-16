@@ -27,11 +27,23 @@ function dismiss(id: number): void {
     toasts.value = toasts.value.filter((toast) => toast.id !== id);
 }
 
+/*
+ * Chaque message porte un identifiant unique : un rechargement partiel de la
+ * page (suivi d'une synchronisation...) conserve l'ancien message, qui ne
+ * doit pas s'afficher de nouveau.
+ */
+let shownId: string | null = null;
+
 watch(
     () => page.props.flash,
     (flash) => {
-        push('success', flash?.success ?? null);
-        push('error', flash?.error ?? null);
+        if (!flash?.id || flash.id === shownId) {
+            return;
+        }
+
+        shownId = flash.id;
+        push('success', flash.success);
+        push('error', flash.error);
     },
     { immediate: true, deep: true },
 );

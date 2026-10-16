@@ -11,6 +11,7 @@ use App\Services\Updates\ReleaseChannel;
 use App\Services\Updates\UpdateException;
 use App\Services\Updates\UpdateLauncher;
 use App\Services\Updates\UpdateManager;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -47,6 +48,8 @@ class UpdateTest extends TestCase
             'techindex.updates.public_key' => base64_encode(sodium_crypto_sign_publickey($pair)),
             'techindex.updates.base_url' => 'https://github.test',
             'techindex.updates.deployment' => 'plesk',
+            // Pas d'attente du démarrage du script (lanceur simulé).
+            'techindex.updates.start_timeout' => 0,
         ]);
 
         Http::preventStrayRequests();
@@ -186,12 +189,89 @@ class UpdateTest extends TestCase
         $admin = $this->admin();
         $updates->request('1.1.0', $admin);
 
-        $launcher->shouldReceive('launch')->once()->with($this->script, '1.1.0', $admin->id);
+        $launcher->shouldReceive('launch')->once()->with($this->script, '1.1.0', $admin->id, Mockery::type('string'));
 
         $this->assertSame('1.1.0', $updates->dispatch());
         $this->assertSame('queued', $updates->status()['state']);
         $this->assertNull($updates->dispatch());
         $this->assertTrue($updates->inProgress());
+    }
+
+    public function test_a_script_that_stops_before_starting_is_reported(): void
+    {
+        $launcher = Mockery::mock(UpdateLauncher::class);
+        $this->usePleskScript($launcher);
+        $this->publish('1.1.0');
+        $updates = app(UpdateManager::class);
+        $updates->check();
+        $updates->request('1.1.0', $this->admin());
+
+        // Le script s'arrête aussitôt, sans écrire son état (ex. bash introuvable).
+        $launcher->shouldReceive('launch')->once()->andReturnUsing(function (string $script, string $version, ?int $user, string $log): void {
+            File::put($log, "nohup: impossible d'exécuter la commande « bash »: Aucun fichier ou dossier de ce type\n");
+        });
+
+        $updates->dispatch();
+
+        $status = $updates->status();
+        $this->assertSame('failed', $status['state']);
+        $this->assertStringContainsString('impossible d\'exécuter la commande « bash »', $status['message']);
+        $this->assertFalse($updates->inProgress());
+    }
+
+    public function test_a_request_never_taken_by_the_scheduler_fails_instead_of_waiting_forever(): void
+    {
+        $this->usePleskScript();
+        $this->publish('1.1.0');
+        $updates = app(UpdateManager::class);
+        $updates->check();
+        $admin = $this->admin();
+        $updates->request('1.1.0', $admin);
+
+        $this->actingAs($admin)->getJson('/admin/updates/status')
+            ->assertOk()
+            ->assertJsonPath('pending.version', '1.1.0')
+            ->assertJsonPath('scheduler.running', false);
+
+        $this->travel(UpdateManager::STALE_REQUEST_SECONDS + 60)->seconds();
+
+        $this->actingAs($admin)->getJson('/admin/updates/status')
+            ->assertOk()
+            ->assertJsonPath('pending', null)
+            ->assertJsonPath('status.state', 'failed')
+            ->assertJsonPath('status.version', '1.1.0');
+
+        $this->assertStringContainsString('tâche planifiée ne s\'exécute pas', (string) $updates->status()['message']);
+        $this->assertFalse(Storage::disk('local')->exists('updates/request.json'));
+        $this->assertSame(1, AuditLog::query()->where('event', 'update.failed')->count());
+    }
+
+    public function test_the_status_reports_whether_the_scheduler_runs(): void
+    {
+        $admin = $this->admin();
+
+        Cache::forever(UpdateManager::HEARTBEAT_CACHE_KEY, now()->subMinute()->getTimestamp());
+        $this->actingAs($admin)->getJson('/admin/updates/status')->assertJsonPath('scheduler.running', true);
+
+        Cache::forever(UpdateManager::HEARTBEAT_CACHE_KEY, now()->subMinutes(10)->getTimestamp());
+        $this->actingAs($admin)->getJson('/admin/updates/status')->assertJsonPath('scheduler.running', false);
+    }
+
+    public function test_a_pending_request_can_be_cancelled(): void
+    {
+        $this->usePleskScript();
+        $this->publish('1.1.0');
+        $updates = app(UpdateManager::class);
+        $updates->check();
+        $admin = $this->admin();
+        $updates->request('1.1.0', $admin);
+
+        $this->actingAs($admin)->postJson('/admin/updates/cancel')->assertOk();
+
+        $this->assertFalse(Storage::disk('local')->exists('updates/request.json'));
+        $this->assertFalse($updates->inProgress());
+        $this->assertTrue(AuditLog::query()->where('event', 'update.cancelled')->where('user_id', $admin->id)->exists());
+        $this->actingAs($admin)->postJson('/admin/updates/cancel')->assertStatus(409);
     }
 
     public function test_the_outcome_of_an_update_is_audited_once(): void

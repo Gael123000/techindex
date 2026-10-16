@@ -173,6 +173,21 @@ Retour arrière, avec les mêmes précautions qu'au § 3 :
 `releases/` ; la version abandonnée y reste. Pour revenir ensuite à la
 version la plus récente : `./techindex-plesk.sh update`.
 
+### Dépannage d'une mise à jour lancée depuis l'administration
+
+La page *Mises à jour* ne reste jamais en attente indéfiniment :
+
+| Affichage | Cause et remède |
+|-----------|-----------------|
+| « La tâche planifiée ne s'exécute pas » sous la demande | La tâche Plesk `schedule:run` (chaque minute) est absente, désactivée ou en erreur : voir [deploiement-plesk.md](deploiement-plesk.md), § tâche planifiée. Annulez la demande ou lancez `./techindex-plesk.sh update` en SSH. Sans prise en charge, la demande est abandonnée au bout de 10 minutes. |
+| Échec « Le script de mise à jour s'est arrêté avant de démarrer : … » | Le script n'a pas pu s'exécuter (bash, PHP ou droits) ; la fin du message reprend son erreur, également dans `shared/storage/app/private/updates/launch.log`. |
+| Échec « Le script de mise à jour n'a pas démarré » | Le script lancé n'a rien signalé en 10 minutes (processus arrêté par l'hébergeur). Lancez la mise à jour en SSH. |
+
+Versions 1.0.3 et antérieures : la fenêtre de confirmation de l'identité pouvait s'ouvrir
+derrière celle de l'installation (bouton qui tourne sans fin). Pour installer
+la version qui corrige ce défaut, actualisez la page *Mises à jour* (F5) avant
+de cliquer sur *Installer*, ou mettez à jour une fois en SSH.
+
 ## 5. Poste Windows
 
 ```powershell

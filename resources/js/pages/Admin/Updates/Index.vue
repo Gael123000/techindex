@@ -6,7 +6,7 @@ import { route } from 'ziggy-js';
 import Badge from '@/components/Badge.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import PageHeader from '@/components/PageHeader.vue';
-import { ensurePasswordConfirmed } from '@/composables/usePasswordConfirmation';
+import { ensurePasswordConfirmed, requestPasswordConfirmation } from '@/composables/usePasswordConfirmation';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { HttpError, requestJson } from '@/lib/http';
@@ -30,6 +30,10 @@ interface UpdateState {
     channel: { enabled: boolean; configured: boolean; repository: string };
     check: { checked_at: string; latest: ReleaseInfo | null; available: boolean; error: string | null } | null;
     can_apply: boolean;
+    /** Tâche planifiée qui lance les mises à jour demandées. */
+    scheduler: { last_run: string | null; running: boolean };
+    /** Délai (secondes) avant l'abandon d'une demande non prise en charge. */
+    stale_after: number;
     pending: { version: string; requested_at: string | null; requested_by: string | null } | null;
     status: {
         state: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
@@ -129,23 +133,58 @@ async function install(): Promise<void> {
         return;
     }
 
+    const version = latest.value.version;
     applying.value = true;
     actionError.value = null;
+    // La fenêtre se ferme d'abord : la confirmation d'identité s'affiche seule.
+    confirming.value = false;
 
     try {
         if (!(await ensurePasswordConfirmed())) {
             return;
         }
 
-        const result = await requestJson<{ message: string }>(route('admin.updates.apply'), { method: 'POST', body: { version: latest.value.version } });
-        actionInfo.value = result.message;
-        confirming.value = false;
-        await refresh();
+        const result = await apply(version);
+
+        if (result !== null) {
+            actionInfo.value = result.message;
+            await refresh();
+        }
     } catch (exception) {
         actionError.value = exception instanceof Error ? exception.message : 'La mise à jour n\'a pas pu être programmée.';
-        confirming.value = false;
     } finally {
         applying.value = false;
+    }
+}
+
+/**
+ * Demande de mise à jour ; si la confirmation d'identité a expiré entre-temps
+ * (423), elle est redemandée puis la demande est renvoyée une fois.
+ */
+async function apply(version: string): Promise<{ message: string } | null> {
+    const send = () => requestJson<{ message: string }>(route('admin.updates.apply'), { method: 'POST', body: { version } });
+
+    try {
+        return await send();
+    } catch (exception) {
+        if (!(exception instanceof HttpError) || exception.status !== 423) {
+            throw exception;
+        }
+
+        return (await requestPasswordConfirmation()) ? send() : null;
+    }
+}
+
+async function cancelRequest(): Promise<void> {
+    actionError.value = null;
+    actionInfo.value = null;
+
+    try {
+        const result = await requestJson<{ message: string }>(route('admin.updates.cancel'), { method: 'POST' });
+        actionInfo.value = result.message;
+        await refresh();
+    } catch (exception) {
+        actionError.value = exception instanceof Error ? exception.message : 'La demande n\'a pas pu être annulée.';
     }
 }
 </script>
@@ -246,10 +285,23 @@ async function install(): Promise<void> {
                 <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin text-slate-500" aria-hidden="true" />
             </div>
 
-            <p v-if="state.pending" class="mt-3 text-sm text-slate-600">
-                Version {{ state.pending.version }} demandée<span v-if="state.pending.requested_by"> par {{ state.pending.requested_by }}</span>
-                le {{ formatDateTime(state.pending.requested_at) }} : elle démarre à la prochaine exécution de la tâche planifiée (au plus une minute).
-            </p>
+            <template v-if="state.pending">
+                <p class="mt-3 text-sm text-slate-600">
+                    Version {{ state.pending.version }} demandée<span v-if="state.pending.requested_by"> par {{ state.pending.requested_by }}</span>
+                    le {{ formatDateTime(state.pending.requested_at) }} : elle démarre à la prochaine exécution de la tâche planifiée (au plus une minute).
+                </p>
+                <p v-if="!state.scheduler.running" class="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+                    <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>
+                        La tâche planifiée ne s'exécute pas
+                        ({{ state.scheduler.last_run ? `dernière exécution le ${formatDateTime(state.scheduler.last_run)}` : 'aucune exécution enregistrée' }}) :
+                        la mise à jour ne démarrera pas. Vérifiez dans Plesk la tâche « schedule:run » (chaque minute), ou lancez
+                        <code class="rounded bg-amber-100 px-1">./techindex-plesk.sh update</code> en SSH. Sans prise en charge, la demande est abandonnée
+                        après {{ Math.round(state.stale_after / 60) }} minutes.
+                    </span>
+                </p>
+                <button type="button" class="btn-secondary btn-sm mt-3" @click="cancelRequest">Annuler la demande</button>
+            </template>
             <dl v-else class="dl-grid mt-4">
                 <div>
                     <dt>Version</dt>

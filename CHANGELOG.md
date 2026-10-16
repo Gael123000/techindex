@@ -10,6 +10,27 @@ messages des commits depuis la version précédente.
 
 ## [Non publié]
 
+## [1.0.4] - 2026-10-16
+
+- **Intégrations** : « Synchroniser » ne tourne plus en boucle. La
+  synchronisation lancée depuis l'administration s'exécute aussitôt, sans
+  dépendre de la file d'attente (qui n'était pas traitée sur un hébergement
+  sans tâche planifiée active) ; une synchronisation qui ne démarre pas ou
+  s'interrompt est signalée en échec au lieu d'être attendue indéfiniment.
+  Les synchronisations automatiques s'exécutent directement dans la tâche
+  planifiée.
+- **Notifications** : un message n'est plus réaffiché à chaque rechargement
+  automatique de la page (suivi d'une synchronisation, d'un import).
+- **Mises à jour depuis l'administration** : le bouton « Installer » ne tourne
+  plus sans fin. La confirmation de l'identité s'ouvrait derrière la fenêtre
+  d'installation quand on arrivait sur la page par le menu ; la dernière
+  fenêtre ouverte passe désormais toujours au premier plan (et seule elle
+  réagit à Échap). Une demande que la tâche planifiée ne prend pas en charge
+  est signalée (« La tâche planifiée ne s'exécute pas »), peut être annulée et
+  est abandonnée après 10 minutes ; un script arrêté avant de démarrer
+  affiche sa cause. Installations en 1.0.3 ou antérieure : actualisez la
+  page (F5) avant de cliquer sur « Installer » pour obtenir cette version.
+
 ## [1.0.3] - 2026-10-16
 
 - **Groupes d'entreprises** : un client peut être rattaché à une entreprise

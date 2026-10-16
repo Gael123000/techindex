@@ -25,6 +25,18 @@ class UpdateManager
 
     private const STATUS = 'updates/status.json';
 
+    /** Sortie du lancement du script (erreurs survenues avant son propre journal). */
+    private const LAUNCH_LOG = 'updates/launch.log';
+
+    /** Témoin écrit chaque minute par le planificateur (routes/console.php). */
+    public const HEARTBEAT_CACHE_KEY = 'techindex:scheduler-heartbeat';
+
+    /** Demande non prise en charge par la tâche planifiée au-delà de ce délai : abandonnée. */
+    public const STALE_REQUEST_SECONDS = 600;
+
+    /** Script lancé mais jamais démarré au-delà de ce délai : échec. */
+    private const STALE_QUEUED_SECONDS = 600;
+
     public function __construct(
         private readonly ReleaseChannel $channel,
         private readonly AuditLogger $audit,
@@ -141,6 +153,69 @@ class UpdateManager
     }
 
     /**
+     * Annule une demande pas encore prise en charge par la tâche planifiée.
+     */
+    public function cancel(User $user): bool
+    {
+        $request = $this->pendingRequest();
+
+        if ($request === null) {
+            return false;
+        }
+
+        $this->disk()->delete(self::REQUEST);
+        $this->audit->log('update.cancelled', metadata: ['version' => $request['version'] ?? null], user: $user);
+
+        return true;
+    }
+
+    /**
+     * Dernière exécution du planificateur (horodatage), ou null s'il n'a jamais tourné.
+     */
+    public function schedulerLastRun(): ?int
+    {
+        $heartbeat = Cache::get(self::HEARTBEAT_CACHE_KEY);
+
+        return is_numeric($heartbeat) ? (int) $heartbeat : null;
+    }
+
+    public function schedulerRunning(): bool
+    {
+        $last = $this->schedulerLastRun();
+
+        return $last !== null && now()->getTimestamp() - $last <= 180;
+    }
+
+    /**
+     * Appelé à chaque affichage de l'état : une demande que la tâche
+     * planifiée n'a pas prise en charge, ou un script qui n'a jamais démarré,
+     * passent en échec au lieu de laisser la page attendre indéfiniment.
+     */
+    public function expireStalled(): void
+    {
+        $request = $this->pendingRequest();
+        $requestedAt = isset($request['requested_at']) ? strtotime((string) $request['requested_at']) : false;
+
+        if ($request !== null && $requestedAt !== false && now()->getTimestamp() - $requestedAt > self::STALE_REQUEST_SECONDS) {
+            $this->disk()->delete(self::REQUEST);
+            $this->write(self::STATUS, [
+                'state' => 'failed',
+                'version' => $request['version'] ?? null,
+                'from' => $this->installedVersion(),
+                'source' => 'interface',
+                'requested_by_id' => $request['requested_by_id'] ?? null,
+                'started_at' => $request['requested_at'],
+                'finished_at' => now()->toIso8601String(),
+                'message' => $this->schedulerRunning()
+                    ? 'La tâche planifiée s\'exécute mais n\'a pas lancé la mise à jour : consultez « ./techindex-plesk.sh logs », ou lancez « ./techindex-plesk.sh update » en SSH.'
+                    : 'La tâche planifiée ne s\'exécute pas : la mise à jour n\'a pas pu démarrer. Vérifiez la tâche « schedule:run » dans Plesk (Tâches planifiées, chaque minute), ou lancez « ./techindex-plesk.sh update » en SSH.',
+            ]);
+        }
+
+        $this->syncStatus();
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     public function pendingRequest(): ?array
@@ -209,16 +284,70 @@ class UpdateManager
         }
 
         $this->write(self::STATUS, $status);
+        $this->disk()->delete(self::LAUNCH_LOG);
 
         try {
-            $this->launcher->launch($this->pleskScript(), $version, isset($request['requested_by_id']) ? (int) $request['requested_by_id'] : null);
+            $this->launcher->launch(
+                $this->pleskScript(),
+                $version,
+                isset($request['requested_by_id']) ? (int) $request['requested_by_id'] : null,
+                $this->disk()->path(self::LAUNCH_LOG),
+            );
         } catch (Throwable $exception) {
             $this->write(self::STATUS, [...$status, 'state' => 'failed', 'message' => 'Lancement impossible : '.$exception->getMessage(), 'finished_at' => now()->toIso8601String()]);
 
             return null;
         }
 
+        $this->confirmStarted($status);
+
         return $version;
+    }
+
+    /**
+     * Le script signale son démarrage dans status.json dès ses premières
+     * lignes. S'il s'est arrêté avant (bash, PHP ou droits introuvables),
+     * l'échec et sa cause sont affichés au lieu d'une attente sans fin.
+     *
+     * @param  array<string, mixed>  $status
+     */
+    private function confirmStarted(array $status): void
+    {
+        $deadline = microtime(true) + (float) config('techindex.updates.start_timeout', 15);
+
+        while ($this->status()['state'] === 'queued' && microtime(true) < $deadline) {
+            usleep(250_000);
+        }
+
+        if ($this->status()['state'] !== 'queued') {
+            return;
+        }
+
+        $output = $this->launchOutput();
+
+        if ($output !== '') {
+            $this->write(self::STATUS, [
+                ...$status,
+                'state' => 'failed',
+                'message' => 'Le script de mise à jour s\'est arrêté avant de démarrer : '.$output,
+                'finished_at' => now()->toIso8601String(),
+            ]);
+        }
+    }
+
+    /**
+     * Dernières lignes de la sortie du lancement, sans couleurs.
+     */
+    private function launchOutput(): string
+    {
+        if (! $this->disk()->exists(self::LAUNCH_LOG)) {
+            return '';
+        }
+
+        $content = (string) preg_replace('/\e\[[0-9;]*m/', '', (string) $this->disk()->get(self::LAUNCH_LOG));
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $content)), fn (string $line): bool => $line !== ''));
+
+        return mb_substr(implode(' ', array_slice($lines, -3)), 0, 500);
     }
 
     /**
@@ -233,8 +362,9 @@ class UpdateManager
 
         if ($status['state'] === 'running' && isset($status['pid']) && is_dir('/proc') && ! is_dir('/proc/'.(int) $status['pid'])) {
             $status = [...$status, 'state' => 'failed', 'message' => 'Mise à jour interrompue avant la fin : consultez le journal, puis « ./techindex-plesk.sh status ».', 'finished_at' => $now];
-        } elseif ($status['state'] === 'queued' && $startedAt !== false && time() - $startedAt > 900) {
-            $status = [...$status, 'state' => 'failed', 'message' => 'La mise à jour n\'a pas démarré.', 'finished_at' => $now];
+        } elseif ($status['state'] === 'queued' && $startedAt !== false && now()->getTimestamp() - $startedAt > self::STALE_QUEUED_SECONDS) {
+            $output = $this->launchOutput();
+            $status = [...$status, 'state' => 'failed', 'message' => 'Le script de mise à jour n\'a pas démarré'.($output !== '' ? ' : '.$output : '.'), 'finished_at' => $now];
         }
 
         if (! in_array($status['state'], ['succeeded', 'failed'], true) || ! empty($status['audited'])) {

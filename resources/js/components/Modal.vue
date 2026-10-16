@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { closeModal, isTopModal, openModal } from '@/lib/modalStack';
 
 /**
  * Fenêtre modale accessible : rôle dialog, titre associé, focus placé dans
  * la fenêtre à l'ouverture et restauré à la fermeture, Échap pour fermer,
- * tabulation maintenue dans la fenêtre.
+ * tabulation maintenue dans la fenêtre. La dernière fenêtre ouverte passe au
+ * premier plan (voir lib/modalStack).
  */
 const props = withDefaults(defineProps<{ show: boolean; title: string; size?: 'sm' | 'md' | 'lg' | 'xl' }>(), { size: 'md' });
 const emit = defineEmits<{ close: [] }>();
@@ -13,6 +15,8 @@ const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLElement | null>(null);
 const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`;
 let previouslyFocused: HTMLElement | null = null;
+let modalId: number | null = null;
+const layer = ref(50);
 
 const widths = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' };
 
@@ -25,7 +29,8 @@ function focusables(): HTMLElement[] {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-    if (!props.show) {
+    // Fenêtres superposées : seule celle du dessus réagit au clavier.
+    if (!props.show || modalId === null || !isTopModal(modalId)) {
         return;
     }
 
@@ -61,29 +66,38 @@ watch(
     async (show) => {
         if (show) {
             previouslyFocused = document.activeElement as HTMLElement | null;
+            const opened = openModal();
+            modalId = opened.id;
+            layer.value = opened.layer;
             document.addEventListener('keydown', onKeydown);
-            document.body.style.overflow = 'hidden';
             await nextTick();
             const autofocus = dialog.value?.querySelector<HTMLElement>('[autofocus]');
             (autofocus ?? focusables()[0] ?? dialog.value)?.focus();
         } else {
             document.removeEventListener('keydown', onKeydown);
-            document.body.style.overflow = '';
+            release();
             previouslyFocused?.focus();
         }
     },
     { immediate: true },
 );
 
+function release(): void {
+    if (modalId !== null) {
+        closeModal(modalId);
+        modalId = null;
+    }
+}
+
 onBeforeUnmount(() => {
     document.removeEventListener('keydown', onKeydown);
-    document.body.style.overflow = '';
+    release();
 });
 </script>
 
 <template>
     <Teleport to="body">
-        <div v-if="show" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+        <div v-if="show" class="fixed inset-0 flex items-start justify-center overflow-y-auto p-4 sm:p-8" :style="{ zIndex: layer }">
             <div class="fixed inset-0 bg-navy-950/60" aria-hidden="true" @click="emit('close')" />
             <div
                 ref="dialog"
